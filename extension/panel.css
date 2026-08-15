@@ -6,6 +6,7 @@
   box-shadow:0 3px 12px rgba(0,0,0,.28);
 }
 #nhi-helper-btn:hover{ background:#0b5a52; }
+#nhi-helper-btn:disabled{ opacity:.62; cursor:wait; }
 
 #nhi-helper-root{
   position:fixed; right:18px; top:18px; bottom:18px; width:min(560px,92vw);
@@ -175,3 +176,32 @@
 #nhi-helper-root .nh-reporttbl th:nth-child(4){ min-width:120px; }
 #nhi-helper-root .nh-reporttbl th:nth-child(5){ min-width:150px; }
 #nhi-helper-root .nh-reporttext{ white-space:normal; line-height:1.5; word-break:break-word; }
+
+/* ── 六區整合病歷摘要 ─────────────────────────────────── */
+#nhi-helper-root .nh-ag-progress{ display:grid; gap:7px; margin-top:10px; }
+#nhi-helper-root .nh-ag-row{ display:flex; justify-content:space-between; gap:14px;
+  border:1px solid #e2edec; border-left:4px solid #93a3a3; border-radius:7px;
+  padding:8px 10px; background:#fff; }
+#nhi-helper-root .nh-ag-row span{ color:#5f7070; text-align:right; }
+#nhi-helper-root .nh-ag-row.nh-ag-running{ border-left-color:#0f6e64; background:#f4f9f9; }
+#nhi-helper-root .nh-ag-row.nh-ag-ok{ border-left-color:#0a7d43; }
+#nhi-helper-root .nh-ag-row.nh-ag-partial,
+#nhi-helper-root .nh-ag-row.nh-ag-empty{ border-left-color:#b9781d; background:#fffaf2; }
+#nhi-helper-root .nh-ag-row.nh-ag-error{ border-left-color:#b43a2d; background:#fff4f1; }
+#nhi-helper-root .nh-ag-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:10px 0; }
+#nhi-helper-root .nh-ag-card{ border:1px solid #e2edec; border-left:4px solid #0a7d43;
+  border-radius:8px; padding:8px 10px; min-width:0; }
+#nhi-helper-root .nh-ag-card b, #nhi-helper-root .nh-ag-card span{ display:block; }
+#nhi-helper-root .nh-ag-card span{ color:#5f7070; font-size:12px; margin-top:2px; }
+#nhi-helper-root .nh-ag-card.nh-ag-partial,
+#nhi-helper-root .nh-ag-card.nh-ag-empty{ border-left-color:#b9781d; }
+#nhi-helper-root .nh-ag-card.nh-ag-error{ border-left-color:#b43a2d; }
+#nhi-helper-root .nh-ag-detail{ border:1px solid #e2edec; border-radius:8px; margin:8px 0; }
+#nhi-helper-root .nh-ag-detail summary{ cursor:pointer; padding:8px 10px; color:#0f6e64; font-weight:700; }
+#nhi-helper-root .nh-ag-preview{ padding:0 10px 10px; overflow:auto; }
+#nhi-helper-root .nh-ag-preview pre{ white-space:pre-wrap; word-break:break-word; margin:4px 0; font-family:inherit; }
+#nhi-helper-root .nh-ag-preview table{ border-collapse:collapse; min-width:760px; font-size:12px; }
+#nhi-helper-root .nh-ag-preview th, #nhi-helper-root .nh-ag-preview td{
+  border:1px solid #d6e2e1; padding:4px 7px; text-align:left; vertical-align:top; }
+#nhi-helper-root .nh-ag-preview th{ background:#f4f9f9; color:#0f6e64; }
+@media (max-width:760px){ #nhi-helper-root .nh-ag-grid{ grid-template-columns:1fr; } }

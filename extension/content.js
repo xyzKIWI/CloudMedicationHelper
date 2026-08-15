@@ -1,19 +1,20 @@
-/* 雲端小幫手 — content script（用藥紀錄 IMUE0008 ＋ 檢驗結果 IMUE0060）
+/* 雲端小幫手 — content script（單頁整理＋六區整合病歷摘要）
  *
  * 設計原則（刻意的限制，改動前請先想清楚）：
  * 1. **完全不連外**：整支檔案沒有 fetch／XMLHttpRequest／WebSocket，manifest 的
  *    permissions 也是空的。病人資料只在這個分頁的記憶體裡處理完就丟掉，
  *    不寫 localStorage、不寫 chrome.storage。這是處理健保雲端資料的底線。
- * 2. **唯讀**：不改頁面上任何原始資料、不代按查詢、不換卡。只讀表格、另開面板。
+ * 2. **不改原始資料**：單頁整理只讀表格；整合摘要只會依序切換既有頁籤、
+ *    開啟原頁報告，絕不代按查詢、修改或送出病歷資料。
  * 3. **看得到什麼就整理什麼**：頁面上沒查出來的資料，這支也不會去要。
  *    ⚠️ 分頁只讀「目前顯示的那一頁」——DataTables 分頁時要先切成顯示全部，
  *    面板會標出讀到幾列，數字對不上就是還沒切。
- * 4. **不猜格式**：沒實際看過的頁面不寫解析器。目前只支援上面兩頁。
+ * 4. **不猜資料**：只解析已辨識的欄位；讀不到就明確標示需回原頁核對。
  */
 (() => {
   'use strict';
   const ID = 'nhi-helper-root', BTN = 'nhi-helper-btn', DAY_MS = 86400000;
-  let activePanelFingerprint = '';
+  let activePanelFingerprint = '', aggregateRunning = false;
   if (document.getElementById(ID)) return;
   /* ⚠️ 頁面上可能已經殘留一顆沒有事件的按鈕：老闆在外掛啟用的狀態下把頁面「另存新檔」，
    *    存下來的 HTML 就會夾帶當時的按鈕元素（有 DOM、沒有 JS）。同 id 重複時
@@ -23,6 +24,35 @@
   // ── 小工具 ────────────────────────────────────────────
   const txt = el => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const isVisible = el => {
+    if (!el || !el.isConnected) return false;
+    const style = getComputedStyle(el), rect = el.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  };
+
+  function fnv1a(value, seed = 2166136261) {
+    let hash = seed;
+    for (const c of String(value || '')) {
+      hash ^= c.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return String(hash >>> 0);
+  }
+
+  /** 只保留不可逆的記憶體內指紋，用來避免 SPA 換病人後殘留前一人的摘要。 */
+  function patientContextFingerprint() {
+    const bodyText = String(document.body && document.body.innerText || '');
+    const match = bodyText.match(/身分證號\s*[：:]\s*([A-Z0-9*]+)/i);
+    if (!match) return 'unknown';
+    const identityInputs = [...document.querySelectorAll('input')].filter(input =>
+      /(?:身分|身份|idno|identity|出生|birth)/i.test([
+        input.id, input.name, input.placeholder, input.getAttribute('aria-label')
+      ].filter(Boolean).join('|'))
+    ).map(input => String(input.value || '')).filter(Boolean);
+    const nearby = (bodyText.match(/身分證號\s*[：:].{0,50}/i) || [''])[0];
+    const context = [match[1], nearby, ...identityInputs].join('|');
+    return `${fnv1a(context)}-${fnv1a(context, 3335557771)}`;
+  }
 
   /** 民國日期 115/07/27 → Date；非預期格式回 null（不要猜） */
   function rocDate(s) {
@@ -33,6 +63,30 @@
     return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
       ? d
       : null;
+  }
+  function rocDateFromText(s) {
+    const match = String(s || '').match(/\d{2,3}\/\d{1,2}\/\d{1,2}/);
+    return match ? rocDate(match[0]) : null;
+  }
+  function calendarMonthsAgo(date, months) {
+    const source = new Date(date); source.setHours(0, 0, 0, 0);
+    const day = source.getDate();
+    const out = new Date(source.getFullYear(), source.getMonth(), 1);
+    out.setMonth(out.getMonth() - months);
+    out.setDate(Math.min(day, new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate()));
+    return out;
+  }
+  function recentRows(rows, months = 3, today = new Date()) {
+    const end = new Date(today); end.setHours(0, 0, 0, 0);
+    const start = calendarMonthsAgo(end, months);
+    const kept = rows.filter(row => row.date && row.date >= start && row.date <= end);
+    const invalidDate = rows.filter(row => !row.date);
+    const future = rows.filter(row => row.date && row.date > end);
+    const outsideRange = rows.filter(row => row.date && row.date < start);
+    return {
+      rows: kept, start, end, invalidDate, future, outsideRange,
+      excluded: invalidDate.length + future.length + outsideRange.length
+    };
   }
   const fmt = d => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '';
   const md = d => d ? `${d.getMonth() + 1}/${d.getDate()}` : '';
@@ -63,24 +117,58 @@
 
   // ── 表格挑選：頁面上會有浮動表頭的複製品（沒有 tbody），挑列數最多那個 ──
   function pickTableBy(wantHeads) {
-    let best = null, bestRows = 0;
+    let best = null, bestScore = -1;
     for (const t of document.querySelectorAll('table')) {
       const heads = [...t.querySelectorAll('th')].map(txt);
       if (!wantHeads.every(w => heads.some(h => h.includes(w)))) continue;
       const rows = t.querySelectorAll('tbody tr').length;
-      if (rows > bestRows) { best = t; bestRows = rows; }
+      const score = (isVisible(t) ? 1000000 : 0) + rows;
+      if (score > bestScore) { best = t; bestScore = score; }
     }
     return best;
   }
   const MED_HEADS = ['就醫日期', '藥品名稱', '給藥日數'];
   const LAB_HEADS = ['檢驗日期', '檢驗項目', '檢驗結果'];
   const IMAGING_HEADS = ['檢驗日期', '醫令名稱', '影像查詢', '報告結果'];
+  const SURGERY_HEADS = ['主診斷', '醫令代碼', '醫令名稱', '執行時間-起'];
+  const DISCHARGE_HEADS = ['住院日期', '出院日期', '出院病摘'];
+  const ALLERGY_DRUG_HEADS = ['過敏藥物', '過敏藥品', '藥品名稱', '藥物名稱', '藥品'];
+
+  function topTab(label) {
+    return [...document.querySelectorAll('a, button, [role="tab"]')]
+      .filter(isVisible)
+      .find(el => txt(el) === label) || null;
+  }
+  function isTopTabCurrent(label) {
+    const el = topTab(label);
+    return !!el && (el.classList.contains('current') || el.getAttribute('aria-selected') === 'true' ||
+      !!(el.parentElement && (el.parentElement.classList.contains('current') ||
+        el.parentElement.classList.contains('active') || el.parentElement.getAttribute('aria-selected') === 'true')));
+  }
+  function pickAllergyTable() {
+    if (!isTopTabCurrent('過敏紀錄')) return null;
+    let best = null, bestScore = -1;
+    for (const table of document.querySelectorAll('table')) {
+      const heads = [...table.querySelectorAll('th')].map(txt);
+      if (!ALLERGY_DRUG_HEADS.some(name => heads.some(head => head.includes(name)))) continue;
+      const score = (isVisible(table) ? 1000000 : 0) + table.querySelectorAll('tbody tr').length;
+      if (score > bestScore) { best = table; bestScore = score; }
+    }
+    return best;
+  }
 
   /** 這一頁是哪一種？先看表格，表格才是真的（網址會因為 SPA 換頁而不準） */
   function detectPage() {
-    if (pickTableBy(IMAGING_HEADS)) return 'imaging';
-    if (pickTableBy(LAB_HEADS)) return 'lab';
-    if (pickTableBy(MED_HEADS)) return 'med';
+    const visibleTable = heads => {
+      const table = pickTableBy(heads);
+      return table && isVisible(table) ? table : null;
+    };
+    if (visibleTable(IMAGING_HEADS)) return 'imaging';
+    if (visibleTable(LAB_HEADS)) return 'lab';
+    if (visibleTable(MED_HEADS)) return 'med';
+    if (visibleTable(SURGERY_HEADS)) return 'surgery';
+    if (visibleTable(DISCHARGE_HEADS)) return 'discharge';
+    if (pickAllergyTable()) return 'allergy';
     return null;
   }
 
@@ -89,8 +177,12 @@
     const table = kind === 'imaging' ? pickTableBy(IMAGING_HEADS)
       : kind === 'lab' ? pickTableBy(LAB_HEADS)
       : kind === 'med' ? pickTableBy(MED_HEADS)
+      : kind === 'surgery' ? pickTableBy(SURGERY_HEADS)
+      : kind === 'discharge' ? pickTableBy(DISCHARGE_HEADS)
+      : kind === 'allergy' ? pickAllergyTable()
       : null;
-    if (!table) return `${location.pathname}|none`;
+    const patient = patientContextFingerprint();
+    if (!table) return `${patient}|${location.pathname}|none`;
     let hash = 2166136261;
     const rows = table.querySelectorAll('tbody tr');
     const imagingIdx = kind === 'imaging' ? headerIndexer(table) : null;
@@ -108,13 +200,26 @@
         hash = Math.imul(hash, 16777619);
       }
     }
-    return `${location.pathname}|${kind}|${rows.length}|${hash >>> 0}`;
+    return `${patient}|${location.pathname}|${kind}|${rows.length}|${hash >>> 0}`;
   }
 
   const headerIndexer = table => {
     const headerCells = table.querySelectorAll('thead th');
     const heads = [...(headerCells.length ? headerCells : table.querySelectorAll('th'))].map(txt);
     return name => heads.findIndex(h => h.includes(name));
+  };
+  const headerIndexAny = (table, names) => {
+    const headerCells = table.querySelectorAll('thead th');
+    const heads = [...(headerCells.length ? headerCells : table.querySelectorAll('th'))].map(txt);
+    for (const name of names) {
+      const exact = heads.findIndex(head => head === name);
+      if (exact >= 0) return exact;
+    }
+    for (const name of names) {
+      const partial = heads.findIndex(head => head.includes(name));
+      if (partial >= 0) return partial;
+    }
+    return -1;
   };
 
   // ══════════════════════════════════════════════════════
@@ -760,12 +865,6 @@
     .filter(Boolean)
     .join('\n');
 
-  const isVisible = el => {
-    if (!el || !el.isConnected) return false;
-    const style = getComputedStyle(el), rect = el.getBoundingClientRect();
-    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
-  };
-
   function readImagingRows(table) {
     const idx = headerIndexer(table);
     const col = {
@@ -891,7 +990,11 @@
       const currentRow = currentTable && readImagingRows(currentTable).find(r => r.key === row.key);
       if (currentRow && currentRow.report) return sanitizeReportText(currentRow.report, row);
       const visible = new Set(visibleReportSurfaces());
-      for (const surface of reportSurfaceCandidates()) {
+      const surfaces = reportSurfaceCandidates();
+      const changedCount = surfaces.filter(surface =>
+        before.get(surface) !== reportSurfaceSignature(surface) && !!reportBodyText(surface)
+      ).length;
+      for (const surface of surfaces) {
         const value = reportBodyText(surface);
         const changed = before.get(surface) !== reportSurfaceSignature(surface);
         const rowMatched = reportSurfaceMatchesRow(surface, row);
@@ -899,7 +1002,9 @@
         // 實際網站會重複利用同一個彈窗 DOM。除了比對本文是否變更，
         // 也用彈窗的「醫令名稱」確認屬於當前列。健保頁會在彈窗仍隱藏時
         // 先更新報告 DOM，因此「內容已變更」本身也是可接受的完成訊號。
-        if (value && (changed || visibleMatch || (duplicateReport && rowMatched && Date.now() >= duplicateFallbackAt))) {
+        const uniqueChanged = changed && changedCount === 1;
+        if (value && ((changed && (rowMatched || uniqueChanged)) || visibleMatch ||
+          (duplicateReport && rowMatched && Date.now() >= duplicateFallbackAt))) {
           const result = sanitizeReportText(value, row);
           // 心電圖等結果可能只有「Normal ECG」一類的短報告，
           // 不能用字數門檻排除；只排除尚在載入的佔位文字。
@@ -990,6 +1095,184 @@
       `<tbody>${rows.map(row => `<tr>${row.map(value => `<td>${cell(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
 
+  // ══════════════════════════════════════════════════════
+  //  D. 手術、出院病摘、過敏紀錄
+  // ══════════════════════════════════════════════════════
+  const cellAt = (tds, index) => index >= 0 && tds[index] ? displayText(tds[index]) : '';
+
+  function readSurgeryRows(table) {
+    const idx = headerIndexer(table);
+    const col = {
+      src: idx('來源'), dept: idx('就醫科別'), dx: idx('主診斷'), code: idx('醫令代碼'),
+      order: idx('醫令名稱'), site: idx('診療部位'), start: idx('執行時間-起'), end: idx('執行時間-迄')
+    };
+    if (['src', 'dept', 'dx', 'code', 'order', 'start'].some(name => col[name] < 0)) return [];
+    const out = [];
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const tds = [...tr.children], startRaw = cellAt(tds, col.start);
+      if (!startRaw || startRaw === '執行時間-起') continue;
+      out.push({
+        dateRaw: startRaw, date: rocDateFromText(startRaw), endRaw: cellAt(tds, col.end),
+        code: cellAt(tds, col.code), order: cellAt(tds, col.order), site: cellAt(tds, col.site),
+        dept: cellAt(tds, col.dept), dx: cellAt(tds, col.dx), src: cellAt(tds, col.src)
+      });
+    }
+    return out.sort((a, b) => (b.date || 0) - (a.date || 0));
+  }
+
+  function readDischargeRows(table) {
+    const idx = headerIndexer(table);
+    const col = {
+      src: idx('來源'), dept: idx('就醫科別'), dx: idx('主診斷'), admission: idx('住院日期'),
+      discharge: idx('出院日期'), summary: idx('出院病摘')
+    };
+    if (Object.values(col).some(index => index < 0)) return [];
+    const out = [];
+    let sourceIndex = 0;
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const tds = [...tr.children], admissionRaw = cellAt(tds, col.admission);
+      if (!admissionRaw || admissionRaw === '住院日期') continue;
+      const summaryCell = tds[col.summary];
+      const summaryControl = [...summaryCell.querySelectorAll('a, button, [role="button"]')]
+        .find(el => /病摘/.test(txt(el)) && isVisible(el)) || null;
+      const inline = displayText(summaryCell).split('\n')
+        .filter(line => !/^(?:開啟此筆病摘|病摘)$/.test(line)).join('\n').trim();
+      const dischargeRaw = cellAt(tds, col.discharge), dx = cellAt(tds, col.dx), src = cellAt(tds, col.src);
+      out.push({
+        sourceIndex, key: [admissionRaw, dischargeRaw, dx, src, sourceIndex].join('|'),
+        admissionRaw, dischargeRaw, date: rocDateFromText(dischargeRaw) || rocDateFromText(admissionRaw),
+        dept: cellAt(tds, col.dept), dx, src,
+        summary: inline.length >= 20 ? sanitizeDischargeText(inline) : '', summaryControl
+      });
+      sourceIndex += 1;
+    }
+    return out.sort((a, b) => (b.date || 0) - (a.date || 0));
+  }
+
+  function sanitizeDischargeText(raw) {
+    const privateLabel = /^(?:病人姓名|患者姓名|姓名|身分證號|身份證號|病歷號|出生日期|性別|電話|聯絡電話|地址)\s*[：:]/i;
+    const signatureLabel = /^(?:報告醫師|主治醫師|住院醫師|簽署醫師|醫師姓名|Electronically\s+Signed)\s*[：:]?/i;
+    return String(raw || '').replace(/\r/g, '').split('\n')
+      .map(line => line.replace(/[ \t\f\v]+/g, ' ').trim())
+      .filter(line => line && !privateLabel.test(line) && !signatureLabel.test(line) &&
+        !/^(?:開啟此筆病摘|出院病摘|關閉|返回)$/.test(line))
+      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  async function waitForDischargeSummary(row, before, cancelled, timeoutMs = 12000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (cancelled()) throw new Error('cancelled');
+      const currentTable = pickTableBy(DISCHARGE_HEADS);
+      const current = currentTable && readDischargeRows(currentTable).find(item => item.key === row.key);
+      if (current && current.summary) return sanitizeDischargeText(current.summary);
+      for (const surface of reportSurfaceCandidates()) {
+        const value = sanitizeDischargeText(reportBodyText(surface));
+        const changed = before.get(surface) !== reportSurfaceSignature(surface);
+        // 出院病摘不可只因視窗已顯示就接受；重用 modal 可能先短暫顯示上一筆內容。
+        // 必須確認本次點擊後 DOM 內容簽章實際改變，否則寧可標示無法讀取。
+        if (value && changed) {
+          if (/^(?:載入中|讀取中|查詢中|loading)(?:[.…‥⋯]*)$/i.test(value)) continue;
+          return value;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
+    return '';
+  }
+
+  async function captureDischargeSummaries(a, progress, cancelled) {
+    let captured = 0, missing = 0;
+    for (let index = 0; index < a.rows.length; index += 1) {
+      if (cancelled()) throw new Error('cancelled');
+      const target = a.rows[index];
+      progress(index + 1, a.rows.length, target, 'opening');
+      const currentTable = pickTableBy(DISCHARGE_HEADS);
+      const current = currentTable && readDischargeRows(currentTable).find(row => row.key === target.key);
+      if (!current) { missing += 1; continue; }
+      if (current.summary) target.summary = sanitizeDischargeText(current.summary);
+      else if (current.summaryControl) {
+        const before = reportSnapshot();
+        current.summaryControl.click();
+        target.summary = await waitForDischargeSummary(target, before, cancelled);
+        closeReportSurface();
+      }
+      if (target.summary) captured += 1;
+      else missing += 1;
+      a.captured = captured; a.missing = missing;
+      progress(index + 1, a.rows.length, target, 'done');
+    }
+    a.captured = captured; a.missing = missing;
+    return a;
+  }
+
+  function readAllergyRows(table) {
+    const col = {
+      code: headerIndexAny(table, ['藥品代碼', '藥物代碼', '醫令代碼', 'ATC代碼', '成分代碼']),
+      drug: headerIndexAny(table, ALLERGY_DRUG_HEADS),
+      reaction: headerIndexAny(table, ['過敏反應', '不良反應', '過敏症狀', '症狀', '反應']),
+      date: headerIndexAny(table, ['紀錄日期', '登錄日期', '就醫日期', '日期']),
+      src: headerIndexAny(table, ['來源', '院所']),
+      note: headerIndexAny(table, ['註記', '備註'])
+    };
+    if (col.drug < 0) return [];
+    const out = [];
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const tds = [...tr.children], drug = cellAt(tds, col.drug);
+      if (!drug || ALLERGY_DRUG_HEADS.includes(drug) || /查無資料/.test(drug)) continue;
+      const dateRaw = cellAt(tds, col.date);
+      out.push({
+        code: cellAt(tds, col.code), drug, reaction: cellAt(tds, col.reaction),
+        dateRaw, date: rocDateFromText(dateRaw), src: cellAt(tds, col.src), note: cellAt(tds, col.note)
+      });
+    }
+    return out;
+  }
+
+  const normalizeAllergyName = value => String(value || '').normalize('NFKC').toUpperCase()
+    .replace(/[\s、，,。；;:：'"“”‘’()[\]{}]+/g, '');
+  function normalizeAllergyCode(value) {
+    const code = String(value || '').normalize('NFKC').toUpperCase().replace(/\s+/g, '');
+    return /^(?:-|—|–|無|查無|未提供|N\/?A|NA|NONE|NULL)$/i.test(code) ? '' : code;
+  }
+  function normalizeAllergyKey(row) {
+    const code = normalizeAllergyCode(row.code);
+    return code ? `CODE:${code}` : `NAME:${normalizeAllergyName(row.drug)}`;
+  }
+
+  function dedupeAllergyRows(rows) {
+    const groups = new Map(), nameToCodeKeys = new Map();
+    const createGroup = row => ({
+      code: normalizeAllergyCode(row.code), drug: row.drug,
+      reactions: [], dates: [], sources: [], notes: [], date: row.date
+    });
+    const merge = (group, row) => {
+      if (row.date && (!group.date || row.date > group.date)) { group.date = row.date; group.drug = row.drug; }
+      const add = (list, value) => { if (value && !list.includes(value)) list.push(value); };
+      add(group.reactions, row.reaction); add(group.dates, row.dateRaw);
+      add(group.sources, row.src); add(group.notes, row.note);
+    };
+
+    // 第一階段先建立所有有效代碼組，才能安全判斷缺碼列是否只對應唯一代碼。
+    for (const row of rows) {
+      const code = normalizeAllergyCode(row.code);
+      if (!code) continue;
+      const key = `CODE:${code}`, name = normalizeAllergyName(row.drug);
+      if (!groups.has(key)) groups.set(key, createGroup(row));
+      merge(groups.get(key), row);
+      if (!nameToCodeKeys.has(name)) nameToCodeKeys.set(name, new Set());
+      nameToCodeKeys.get(name).add(key);
+    }
+    for (const row of rows) {
+      if (normalizeAllergyCode(row.code)) continue;
+      const name = normalizeAllergyName(row.drug), matchingCodes = nameToCodeKeys.get(name);
+      const key = matchingCodes && matchingCodes.size === 1 ? [...matchingCodes][0] : `NAME:${name}`;
+      if (!groups.has(key)) groups.set(key, createGroup(row));
+      merge(groups.get(key), row);
+    }
+    return [...groups.values()].sort((a, b) => (b.date || 0) - (a.date || 0));
+  }
+
   async function copyRichTable(html, plain) {
     if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
       try {
@@ -1016,6 +1299,148 @@
       try { await navigator.clipboard.writeText(plain); return true; } catch (e) { /* 回報失敗 */ }
     }
     return false;
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  E. 六區整合病歷摘要
+  // ══════════════════════════════════════════════════════
+  const AGGREGATE_LABELS = {
+    med: '近三個月西醫用藥', lab: '近三個月檢驗與檢查', imaging: '近三個月影像及病理',
+    surgery: '手術紀錄', discharge: '出院病歷摘要', allergy: '過敏紀錄'
+  };
+  const rocFmt = date => date
+    ? `${date.getFullYear() - 1911}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
+    : '';
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function plainTable(headers, rows) {
+    return [headers, ...rows].map(row => row.map(tsvCell).join('\t')).join('\r\n');
+  }
+  function richTable(headers, rows) {
+    const cell = value => esc(String(value || '')).replace(/\n/g, '<br>');
+    return `<table style="border-collapse:collapse;width:100%"><thead><tr>` +
+      headers.map(h => `<th style="border:1px solid #777;padding:4px;text-align:left">${cell(h)}</th>`).join('') +
+      `</tr></thead><tbody>${rows.map(row => `<tr>${row.map(value =>
+        `<td style="border:1px solid #999;padding:4px;vertical-align:top">${cell(value)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+  function sectionFallback(result, key) {
+    const state = result.states[key];
+    if (state && state.status === 'error') return '（本次未取得資料，請回健保雲端原頁核對）';
+    if (key === 'allergy') return '（原頁目前未顯示過敏紀錄；不能據此判定無藥物過敏，請人工核對）';
+    return '（原頁目前未顯示資料）';
+  }
+
+  function aggregateSectionData(result, key) {
+    if (key === 'med') {
+      const text = result.med && medToPasteFormat(result.med);
+      return { text: text || sectionFallback(result, key), html: `<pre style="white-space:pre-wrap">${esc(text || sectionFallback(result, key))}</pre>` };
+    }
+    if (key === 'lab') {
+      const text = result.lab && labToSimpleList(result.lab);
+      return { text: text || sectionFallback(result, key), html: `<pre style="white-space:pre-wrap">${esc(text || sectionFallback(result, key))}</pre>` };
+    }
+    if (key === 'imaging') {
+      const rows = result.imaging ? imagingRowsSorted(result.imaging).map(row => [
+        row.dateRaw, row.order, row.report || '（無法讀取，請回原頁核對）', row.cat, row.src
+      ]) : [];
+      return rows.length ? { text: plainTable(imagingHeaders, rows), html: richTable(imagingHeaders, rows) }
+        : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
+    }
+    if (key === 'surgery') {
+      const headers = ['執行時間-起', '執行時間-迄', '醫令代碼', '醫令名稱', '診療部位', '就醫科別', '主診斷', '來源'];
+      const rows = (result.surgery || []).map(row => [row.dateRaw, row.endRaw, row.code, row.order, row.site, row.dept, row.dx, row.src]);
+      return rows.length ? { text: plainTable(headers, rows), html: richTable(headers, rows) }
+        : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
+    }
+    if (key === 'discharge') {
+      const headers = ['住院日期', '出院日期', '就醫科別', '主診斷', '出院病摘', '來源'];
+      const rows = result.discharge ? result.discharge.rows.map(row => [
+        row.admissionRaw, row.dischargeRaw, row.dept, row.dx,
+        row.summary || '（無法讀取，請回原頁核對）', row.src
+      ]) : [];
+      return rows.length ? { text: plainTable(headers, rows), html: richTable(headers, rows) }
+        : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
+    }
+    const headers = ['藥物', '藥品代碼', '過敏反應', '紀錄日期', '來源', '註記'];
+    const rows = (result.allergy || []).map(row => [
+      row.drug, row.code, row.reactions.join('；'), row.dates.join('；'), row.sources.join('；'), row.notes.join('；')
+    ]);
+    return rows.length ? { text: plainTable(headers, rows), html: richTable(headers, rows) }
+      : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
+  }
+
+  function aggregateToPlain(result) {
+    const period = `${rocFmt(result.period.start)}～${rocFmt(result.period.end)}`;
+    const parts = [];
+    for (const key of Object.keys(AGGREGATE_LABELS)) {
+      if (aggregateCount(result, key) === 0 || (result.states[key] && result.states[key].status === 'error')) continue;
+      const suffix = ['med', 'lab', 'imaging'].includes(key) ? `（${period}）` : '（依原頁查詢範圍）';
+      parts.push(`【${AGGREGATE_LABELS[key]}${suffix}】\n${aggregateSectionData(result, key).text}`);
+    }
+    parts.push('※ 健保雲端當前可見資料自動彙整；請核對原頁後再存入病歷。');
+    return parts.join('\n\n');
+  }
+
+  function aggregateToHtml(result) {
+    const period = `${rocFmt(result.period.start)}～${rocFmt(result.period.end)}`;
+    const parts = [];
+    for (const key of Object.keys(AGGREGATE_LABELS)) {
+      if (aggregateCount(result, key) === 0 || (result.states[key] && result.states[key].status === 'error')) continue;
+      const suffix = ['med', 'lab', 'imaging'].includes(key) ? `（${period}）` : '（依原頁查詢範圍）';
+      parts.push(`<h3>${esc(AGGREGATE_LABELS[key] + suffix)}</h3>${aggregateSectionData(result, key).html}`);
+    }
+    parts.push('<p><small>※ 健保雲端當前可見資料自動彙整；請核對原頁後再存入病歷。</small></p>');
+    return `<div>${parts.join('')}</div>`;
+  }
+
+  function findVisibleControl(label) {
+    return [...document.querySelectorAll('a, button, [role="tab"], [role="button"]')]
+      .filter(isVisible).find(el => txt(el) === label) || null;
+  }
+
+  async function activateControl(label, cancelled, patientHash, timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+    let control = null;
+    while (Date.now() < deadline && !control) {
+      if (cancelled()) throw new Error('cancelled');
+      if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
+      control = findVisibleControl(label);
+      if (!control) await wait(120);
+    }
+    if (!control) throw new Error(`找不到「${label}」頁籤`);
+    if (control.classList.contains('disable') || control.getAttribute('aria-disabled') === 'true') {
+      throw new Error(`「${label}」目前不可使用`);
+    }
+    const current = control.classList.contains('current') || control.getAttribute('aria-selected') === 'true' ||
+      !!(control.parentElement && (control.parentElement.classList.contains('current') ||
+        control.parentElement.classList.contains('active') || control.parentElement.getAttribute('aria-selected') === 'true'));
+    if (!current) control.click();
+    await wait(160);
+  }
+
+  async function waitForStableTable(picker, cancelled, patientHash, timeoutMs = 15000) {
+    const deadline = Date.now() + timeoutMs;
+    let lastTable = null, lastRows = -1, stableSince = 0;
+    while (Date.now() < deadline) {
+      if (cancelled()) throw new Error('cancelled');
+      if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
+      const table = picker();
+      if (table && isVisible(table)) {
+        const rowCount = table.querySelectorAll('tbody tr').length;
+        if (table === lastTable && rowCount === lastRows) {
+          if (Date.now() - stableSince >= 450) return table;
+        } else {
+          lastTable = table; lastRows = rowCount; stableSince = Date.now();
+        }
+      }
+      await wait(120);
+    }
+    throw new Error('等候表格逾時');
+  }
+
+  async function visitTable(labels, picker, cancelled, patientHash) {
+    for (const label of labels) await activateControl(label, cancelled, patientHash);
+    return waitForStableTable(picker, cancelled, patientHash);
   }
 
   // ══════════════════════════════════════════════════════
@@ -1341,7 +1766,7 @@
       captured: rows.filter(row => row.report).length,
       missing: rows.filter(row => !row.report && !row.reportControl).length
     };
-    const wrap = shell('影像及病理報告整理',
+    const wrap = shell('近三個月影像及病理報告',
       '<button class="nh-btn nh-capture">一鍵讀取並複製</button>');
     wrap.classList.add('nh-wide');
     let cancelled = false, running = false, ready = a.captured === a.rows.length;
@@ -1357,7 +1782,7 @@
           <span><b data-imaging-captured>${a.captured}</b> 筆已讀取報告</span>
           ${a.missing ? `<span class="nh-warn"><b>${a.missing}</b> 筆無法讀取</span>` : ''}
         </div>
-        <div class="nh-note">匯出只保留：檢驗日期、醫令名稱、報告結果、檢驗類別、來源。報告會逐筆在原頁開啟並於本機整理。</div>
+        <div class="nh-note">只整理最近三個曆月；匯出保留：檢驗日期、醫令名稱、報告結果、檢驗類別、來源。報告會逐筆在原頁開啟並於本機整理。</div>
         <div class="nh-progress" aria-live="polite"></div>
         <div class="nh-tblwrap nh-reportwrap"><table class="nh-tbl nh-reporttbl">
           <thead><tr>${imagingHeaders.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
@@ -1422,11 +1847,203 @@
     if (!ready) setTimeout(() => runCapture(false), 0);
   }
 
+  function aggregateCount(result, key) {
+    if (key === 'med') return result.med ? result.med.rows.length : 0;
+    if (key === 'lab') return result.lab ? result.lab.rows.length : 0;
+    if (key === 'imaging') return result.imaging ? result.imaging.rows.length : 0;
+    if (key === 'surgery') return (result.surgery || []).length;
+    if (key === 'discharge') return result.discharge ? result.discharge.rows.length : 0;
+    return (result.allergy || []).length;
+  }
+
+  function renderAggregateResult(wrap, result, patientHash) {
+    const body = wrap.querySelector('.nh-body'), action = wrap.querySelector('.nh-copy-all');
+    const period = `${rocFmt(result.period.start)}～${rocFmt(result.period.end)}`;
+    const cards = Object.keys(AGGREGATE_LABELS).map(key => {
+      const state = result.states[key] || { status: 'error', message: '未完成' };
+      const count = aggregateCount(result, key);
+      const label = ['med', 'lab', 'imaging'].includes(key) ? `${AGGREGATE_LABELS[key]}（${period}）` : AGGREGATE_LABELS[key];
+      const stateText = state.status === 'error' ? state.message
+        : state.status === 'partial' ? `${count} 筆；${state.message}`
+        : state.status === 'empty' ? '原頁目前未顯示資料'
+        : `${count} 筆`;
+      return `<div class="nh-ag-card nh-ag-${esc(state.status)}"><b>${esc(label)}</b><span>${esc(stateText)}</span></div>`;
+    }).join('');
+    body.innerHTML = `<div class="nh-note">三個月採曆月計算（起訖日皆包含）；手術、出院病摘與過敏依原頁目前查詢範圍。</div>
+      <div class="nh-ag-grid">${cards}</div>
+      <div class="nh-warnbox">自動整理不等於病歷確認。空白、逾時或頁面未顯示資料時，請回健保雲端原頁核對；過敏空白不代表 NKDA。</div>
+      ${Object.keys(AGGREGATE_LABELS).map(key => {
+        const data = aggregateSectionData(result, key);
+        return `<details class="nh-ag-detail"><summary>${esc(AGGREGATE_LABELS[key])}</summary><div class="nh-ag-preview">${data.html}</div></details>`;
+      }).join('')}`;
+    action.disabled = false;
+    action.textContent = '複製完整病歷摘要';
+    action.onclick = async () => {
+      if (patientContextFingerprint() !== patientHash) {
+        disposePanel(wrap);
+        alert('偵測到病人資料已變更；舊摘要已清除，請重新彙整。');
+        return;
+      }
+      const msg = wrap.querySelector('.nh-msg');
+      const ok = await copyRichTable(aggregateToHtml(result), aggregateToPlain(result));
+      msg.textContent = ok ? '已複製六區病歷摘要' : '自動複製失敗，請再按一次';
+      setTimeout(() => { if (document.body.contains(msg)) msg.textContent = ''; }, 3000);
+    };
+  }
+
+  async function runAggregateWorkflow() {
+    if (aggregateRunning) return;
+    disposePanel();
+    const patientHash = patientContextFingerprint();
+    if (patientHash === 'unknown') {
+      alert('目前無法確認病人識別狀態，為避免跨病人資料混合，未啟動整合摘要。\n請確認頁首已顯示遮罩後的身分證號，再按一次。');
+      return;
+    }
+    aggregateRunning = true; btn.disabled = true;
+    const wrap = shell('整合病歷摘要', '<button class="nh-btn nh-copy-all" disabled>正在彙整…</button>');
+    wrap.classList.add('nh-wide');
+    let cancelled = false;
+    wrap._nhCleanup = () => { cancelled = true; };
+    wrap.querySelector('.nh-x').onclick = () => disposePanel(wrap);
+    wrap.querySelector('.nh-body').innerHTML = `<div class="nh-note">將依序切換健保雲端頁籤，資料僅保留於本分頁記憶體。</div>
+      <div class="nh-ag-progress">${Object.entries(AGGREGATE_LABELS).map(([key, label]) =>
+        `<div class="nh-ag-row" data-key="${key}"><b>${esc(label)}</b><span>等待中</span></div>`).join('')}</div>`;
+    document.body.appendChild(wrap);
+    const isCancelled = () => cancelled || !document.body.contains(wrap);
+    const captureCancelled = () => {
+      if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
+      return isCancelled();
+    };
+    const result = {
+      period: recentRows([], 3, new Date()), states: {}, med: null, lab: null,
+      imaging: null, surgery: [], discharge: null, allergy: []
+    };
+    const setProgress = (key, message, state = 'running') => {
+      const row = wrap.querySelector(`.nh-ag-row[data-key="${key}"]`);
+      if (!row) return;
+      row.className = `nh-ag-row nh-ag-${state}`;
+      const span = row.querySelector('span'); if (span) span.textContent = message;
+    };
+    const collect = async (key, task) => {
+      setProgress(key, '讀取中…');
+      try {
+        await task();
+        const count = aggregateCount(result, key);
+        const current = result.states[key] || {};
+        if (!current.status) current.status = count ? 'ok' : 'empty';
+        current.message = current.message || (count ? `完成 ${count} 筆` : '原頁目前未顯示資料');
+        result.states[key] = current;
+        setProgress(key, current.message, current.status);
+      } catch (error) {
+        const message = String(error && error.message || '讀取失敗');
+        if (message === 'cancelled' || message === 'patient-changed') throw error;
+        result.states[key] = { status: 'error', message: `未完成：${message}` };
+        setProgress(key, result.states[key].message, 'error');
+      }
+    };
+
+    try {
+      await collect('med', async () => {
+        const table = await visitTable(['西醫用藥'], () => pickTableBy(MED_HEADS), isCancelled, patientHash);
+        const windowed = recentRows(readMedRows(table), 3, result.period.end);
+        result.med = analyseMed(windowed.rows);
+        result.states.med = {
+          status: windowed.invalidDate.length ? 'partial' : (windowed.rows.length ? 'ok' : 'empty'),
+          message: windowed.invalidDate.length
+            ? `完成 ${windowed.rows.length} 筆；${windowed.invalidDate.length} 筆日期無法辨識，需核對`
+            : (windowed.rows.length ? `完成 ${windowed.rows.length} 筆` : '')
+        };
+      });
+      await collect('lab', async () => {
+        const table = await visitTable(['檢查與檢驗', '檢查檢驗結果'], () => pickTableBy(LAB_HEADS), isCancelled, patientHash);
+        const windowed = recentRows(readLabRows(table), 3, result.period.end);
+        result.lab = analyseLab(windowed.rows);
+        result.states.lab = {
+          status: windowed.invalidDate.length ? 'partial' : (windowed.rows.length ? 'ok' : 'empty'),
+          message: windowed.invalidDate.length
+            ? `完成 ${windowed.rows.length} 筆；${windowed.invalidDate.length} 筆日期無法辨識，需核對`
+            : (windowed.rows.length ? `完成 ${windowed.rows.length} 筆` : '')
+        };
+      });
+      await collect('imaging', async () => {
+        const table = await visitTable(['檢查與檢驗', '影像及病理'], () => pickTableBy(IMAGING_HEADS), isCancelled, patientHash);
+        const windowed = recentRows(readImagingRows(table), 3, result.period.end);
+        const rows = windowed.rows.filter(row => row.report || row.reportControl);
+        const data = { kind: 'imaging', rows, captured: rows.filter(row => row.report).length, missing: 0 };
+        if (rows.length) await captureImagingReports(data, (current, total) => {
+          setProgress('imaging', `正在讀取報告 ${current}/${total}…`);
+        }, captureCancelled);
+        result.imaging = {
+          kind: 'imaging', captured: data.captured, missing: data.missing,
+          rows: data.rows.map(({ sourceIndex, key, dateRaw, date, order, cat, src, report }) =>
+            ({ sourceIndex, key, dateRaw, date, order, cat, src, report }))
+        };
+        const partial = data.missing > 0 || windowed.invalidDate.length > 0;
+        const warnings = [];
+        if (data.missing) warnings.push(`${data.missing} 筆報告需核對`);
+        if (windowed.invalidDate.length) warnings.push(`${windowed.invalidDate.length} 筆日期無法辨識`);
+        result.states.imaging = {
+          status: partial ? 'partial' : (rows.length ? 'ok' : 'empty'),
+          message: partial ? `${data.captured}/${rows.length} 筆報告成功；${warnings.join('；')}` : (rows.length ? `完成 ${rows.length} 筆` : '')
+        };
+      });
+      await collect('surgery', async () => {
+        const table = await visitTable(['手術紀錄'], () => pickTableBy(SURGERY_HEADS), isCancelled, patientHash);
+        result.surgery = readSurgeryRows(table);
+      });
+      await collect('discharge', async () => {
+        const table = await visitTable(['出院病摘'], () => pickTableBy(DISCHARGE_HEADS), isCancelled, patientHash);
+        const rows = readDischargeRows(table);
+        const data = { rows, captured: rows.filter(row => row.summary).length, missing: 0 };
+        if (rows.length) await captureDischargeSummaries(data, (current, total) => {
+          setProgress('discharge', `正在讀取病摘 ${current}/${total}…`);
+        }, captureCancelled);
+        result.discharge = {
+          captured: data.captured, missing: data.missing,
+          rows: data.rows.map(({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, summary }) =>
+            ({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, summary }))
+        };
+        if (data.missing) result.states.discharge = {
+          status: 'partial', message: `${data.captured}/${rows.length} 筆病摘成功，${data.missing} 筆需核對`
+        };
+      });
+      await collect('allergy', async () => {
+        const table = await visitTable(['過敏紀錄'], pickAllergyTable, isCancelled, patientHash);
+        result.allergy = dedupeAllergyRows(readAllergyRows(table));
+      });
+      if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
+      try {
+        await activateControl('摘要', isCancelled, patientHash);
+      } catch (error) {
+        const message = String(error && error.message || '');
+        if (message === 'patient-changed' || message === 'cancelled') throw error;
+      }
+      if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
+      if (!isCancelled()) {
+        renderAggregateResult(wrap, result, patientHash);
+        activePanelFingerprint = sourceFingerprint();
+      }
+    } catch (error) {
+      const message = String(error && error.message || '');
+      if (message === 'patient-changed') {
+        disposePanel(wrap);
+        alert('偵測到病人資料已變更；為避免資料混合，本次整合結果已清除。');
+      } else if (message !== 'cancelled' && !isCancelled()) {
+        const msg = wrap.querySelector('.nh-msg');
+        if (msg) msg.textContent = '彙整已中止，請回原頁核對後重試';
+      }
+    } finally {
+      aggregateRunning = false;
+      if (document.body.contains(btn)) btn.disabled = false;
+      refreshLabel();
+    }
+  }
+
   // ── 觸發鈕 ────────────────────────────────────────────
   const btn = document.createElement('button');
   btn.id = BTN;
   btn.textContent = '整理';
-  btn.title = '把目前頁面上的用藥、檢驗、影像及病理報告整理成可貼上的格式（純本機）';
+  btn.title = '整理目前頁面，或從摘要頁彙整六區資料成可貼入病歷的格式（純本機）';
 
   /** 依目前頁面內容更新鈕的文字——SPA 換頁不會重載 script，所以每次點都要重測 */
   function refreshLabel() {
@@ -1434,8 +2051,9 @@
     btn.textContent = k === 'imaging' ? '整理影像／病理'
       : k === 'lab' ? '整理檢驗'
       : k === 'med' ? '整理藥歷'
+      : topTab('摘要') ? '彙整病歷'
       : '整理';
-    if (activePanelFingerprint && activePanelFingerprint !== sourceFingerprint(k)) disposePanel();
+    if (!aggregateRunning && activePanelFingerprint && activePanelFingerprint !== sourceFingerprint(k)) disposePanel();
   }
   refreshLabel();
   setInterval(refreshLabel, 2000);
@@ -1443,8 +2061,12 @@
   btn.onclick = () => {
     disposePanel();
     const kind = detectPage();
+    if (['surgery', 'discharge', 'allergy'].includes(kind) || (!kind && topTab('摘要'))) {
+      runAggregateWorkflow();
+      return;
+    }
     if (!kind) {
-      alert('這一頁沒有找到可整理的表格。\n\n目前支援：用藥紀錄、檢驗結果、影像及病理。\n請先在頁面上查詢出資料，再按一次。');
+      alert('這一頁沒有找到可整理的表格。\n請先在健保雲端頁面查詢出資料，再按一次。');
       return;
     }
     if (kind === 'imaging') {
@@ -1453,8 +2075,13 @@
       // 健保雲端會將同一次檢查拆成「影像查詢」與「報告結果」兩列。
       // 只排除一開始就既無報告內容、也無報告控件的影像伴隨列；有報告
       // 控件但讀取失敗的列仍須保留，讓使用者看見無法讀取的警示。
-      const reportRows = rows.filter(row => row.report || row.reportControl);
-      if (!reportRows.length) { alert('目前只有影像查詢資料，沒有可整理的報告結果。'); return; }
+      const windowed = recentRows(rows, 3);
+      const reportRows = windowed.rows.filter(row => row.report || row.reportControl);
+      if (windowed.invalidDate.length && !reportRows.length) {
+        alert(`有 ${windowed.invalidDate.length} 筆檢驗日期無法辨識，未納入最近三個月整理。\n請回原頁核對日期格式。`);
+        return;
+      }
+      if (!reportRows.length) { alert('最近三個月只有影像查詢資料，沒有可整理的報告結果。'); return; }
       renderImaging(reportRows);
     } else if (kind === 'lab') {
       const rows = readLabRows(pickTableBy(LAB_HEADS));
@@ -1469,14 +2096,24 @@
   };
   document.body.appendChild(btn);
 
+  // 新查詢／登出可能在同一 SPA 內換成另一位病人，且遮罩身分證號仍可能碰巧相同。
+  // 在原頁開始這些動作前先清除面板與進行中的工作，不只依賴病人指紋。
+  document.addEventListener('click', event => {
+    const control = event.target && event.target.closest &&
+      event.target.closest('button, a, input[type="submit"], [role="button"]');
+    const label = control ? String(control.value || txt(control)).trim() : '';
+    if (/^(?:查詢|登出)$/.test(label)) disposePanel();
+  }, true);
+  document.addEventListener('submit', () => disposePanel(), true);
+
   // 健保雲端是 SPA；表格換卡、換頁或重新查詢時，不能讓前一位病人的面板殘留。
   let fingerprintCheckQueued = false;
   new MutationObserver(() => {
-    if (!activePanelFingerprint || fingerprintCheckQueued) return;
+    if (aggregateRunning || !activePanelFingerprint || fingerprintCheckQueued) return;
     fingerprintCheckQueued = true;
     setTimeout(() => {
       fingerprintCheckQueued = false;
-      if (activePanelFingerprint && activePanelFingerprint !== sourceFingerprint()) disposePanel();
+      if (!aggregateRunning && activePanelFingerprint && activePanelFingerprint !== sourceFingerprint()) disposePanel();
     }, 0);
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 })();

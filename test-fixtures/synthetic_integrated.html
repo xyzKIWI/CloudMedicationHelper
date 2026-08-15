@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><title>六區整合病歷摘要合成測試</title>
+<style>
+body{font-family:Arial,"Microsoft JhengHei",sans-serif;margin:0}.patient{padding:8px}.tabs{display:flex;gap:4px;background:#0765b5;padding:8px}.tabs a{color:#fff;padding:7px 10px;text-decoration:none}.tabs a.current{background:#fff;color:#075a9f}.subtabs{display:flex;gap:6px;padding:8px}.subtabs button.current{font-weight:bold}section{display:none;padding:10px}section.current{display:block}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px}.gary-cover{display:none;position:fixed;inset:0;background:#0007;z-index:20}.gary-cover.open{display:block}.frow-reports{background:#fff;margin:10vh auto;padding:18px;width:70%}.show-result-text{white-space:pre-wrap}
+</style></head><body>
+<div class="patient">身分證號：SYN***001　性別：女</div>
+<nav class="tabs">
+  <a href="#summary" class="current" data-page="summary">摘要</a>
+  <a href="#med" data-page="med">西醫用藥</a>
+  <a href="#allergy" data-page="allergy">過敏紀錄</a>
+  <a href="#exam" data-page="exam">檢查與檢驗</a>
+  <a href="#surgery" data-page="surgery">手術紀錄</a>
+  <a href="#discharge" data-page="discharge">出院病摘</a>
+</nav>
+<main id="pages">
+  <section id="summary" class="current"><h2>病人資訊</h2><p>合成測試頁，不含真實個案資料。</p></section>
+  <section id="med"><table><thead><tr>
+    <th>項次</th><th>就醫日期</th><th>來源</th><th>主診斷</th><th>ATC3名稱</th><th>複方註記</th><th>成分名稱</th><th>藥品名稱</th><th>用法用量</th><th>藥品用量</th><th>給藥日數</th><th>單筆餘藥日數試算</th><th>高齡者宜注意用藥品項</th><th>ATC5名稱</th><th>ATC5代碼</th><th>ATC7代碼</th><th>藥品代碼</th>
+  </tr></thead><tbody>
+    <tr><td>1</td><td>115/08/01</td><td>甲測試院所<br>門診<br>0000000001</td><td>合成診斷<br>Z000</td><td>測試分類</td><td></td><td>Alpha</td><td>ALPHA TABLETS 5MG</td><td>QD</td><td>28</td><td>28</td><td>0</td><td></td><td>測試</td><td>A00AA</td><td>A00AA0100</td><td>TEST001</td></tr>
+    <tr><td>2</td><td>115/04/01</td><td>甲測試院所<br>門診<br>0000000001</td><td>舊合成診斷<br>Z000</td><td>測試分類</td><td></td><td>Old</td><td>OLD TABLETS 1MG</td><td>QD</td><td>7</td><td>7</td><td>0</td><td></td><td>測試</td><td>A00AA</td><td>A00AA0200</td><td>TEST002</td></tr>
+  </tbody></table></section>
+  <section id="exam"><div class="subtabs"><button class="current" data-exam="lab">檢查檢驗結果</button><button data-exam="imaging">影像及病理</button></div>
+    <div id="lab"><table><thead><tr><th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>檢驗項目</th><th>檢驗結果</th><th>單位</th><th>參考值</th><th>檢驗方法</th><th>檢體採檢方法</th><th>檢驗類別</th><th>來源</th></tr></thead><tbody>
+      <tr><td>1</td><td>115/08/03</td><td>合成檢驗</td><td>Synthetic Glucose</td><td>101</td><td>mg/dL</td><td>[70][99]</td><td>測試法</td><td>測試檢體</td><td>生化</td><td>甲測試院所</td></tr>
+      <tr><td>2</td><td>115/04/03</td><td>舊合成檢驗</td><td>OLD_LAB_SENTINEL</td><td>88</td><td>mg/dL</td><td>[70][99]</td><td>測試法</td><td>測試檢體</td><td>生化</td><td>甲測試院所</td></tr>
+    </tbody></table></div>
+    <div id="imaging" hidden><table><thead><tr><th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>診療部位</th><th>影像查詢</th><th>報告日期</th><th>報告結果</th><th>檢驗類別</th><th>來源</th></tr></thead><tbody>
+      <tr><td>1</td><td>115/08/05</td><td>胸部合成影像</td><td>胸部</td><td><button>影像</button></td><td></td><td></td><td>放射線</td><td>甲測試院所</td></tr>
+      <tr><td>2</td><td>115/08/05</td><td>胸部合成影像</td><td>胸部</td><td></td><td>115/08/05</td><td><button data-detail="imaging-new">報告</button></td><td>放射線</td><td>甲測試院所</td></tr>
+      <tr><td>3</td><td>115/04/05</td><td>舊胸部合成影像</td><td>胸部</td><td></td><td>115/04/05</td><td><button data-detail="imaging-old">報告</button></td><td>放射線</td><td>甲測試院所</td></tr>
+    </tbody></table></div>
+  </section>
+  <section id="surgery"><table><thead><tr><th>項次</th><th>來源</th><th>就醫科別</th><th>主診斷</th><th>醫令代碼</th><th>醫令名稱</th><th>診療部位</th><th>執行時間-起</th><th>執行時間-迄</th></tr></thead><tbody>
+    <tr><td>1</td><td>甲測試院所</td><td>測試科</td><td>合成手術診斷 Z000</td><td>TEST-OP</td><td>SYNTHETIC_OPERATION</td><td>測試部位</td><td>115/07/03</td><td>115/07/03</td></tr>
+  </tbody></table></section>
+  <section id="discharge"><table><thead><tr><th>項次</th><th>來源</th><th>就醫科別</th><th>主診斷</th><th>住院日期</th><th>出院日期</th><th>出院病摘</th><th>其他附檔</th></tr></thead><tbody>
+    <tr><td>1</td><td>甲測試院所</td><td>測試科</td><td>新合成住院診斷 Z000</td><td>115/06/01</td><td>115/06/03</td><td><button data-detail="discharge-new">開啟此筆病摘</button></td><td></td></tr>
+    <tr><td>2</td><td>乙測試院所</td><td>測試科</td><td>舊合成住院診斷 Z001</td><td>115/03/01</td><td>115/03/03</td><td><button data-detail="discharge-old">開啟此筆病摘</button></td><td></td></tr>
+  </tbody></table></section>
+  <section id="allergy"><table><thead><tr><th>項次</th><th>藥品代碼</th><th>藥品名稱</th><th>過敏反應</th><th>紀錄日期</th><th>來源</th><th>註記</th></tr></thead><tbody>
+    <tr><td>1</td><td>ALG001</td><td>TEST ALLERGEN</td><td>Rash</td><td>115/01/01</td><td>甲測試院所</td><td></td></tr>
+    <tr><td>2</td><td>ALG001</td><td>Test Allergen</td><td>Rash</td><td>115/02/01</td><td>乙測試院所</td><td>synthetic note</td></tr>
+    <tr><td>3</td><td>ALG002</td><td>SECOND ALLERGEN</td><td>Itching</td><td>115/03/01</td><td>甲測試院所</td><td></td></tr>
+  </tbody></table></section>
+</main>
+<div class="gary-cover"><div class="frow frow-reports"><div class="detail-title"></div><div class="show-result-text"></div><button class="close">關閉</button></div></div>
+<script>
+window.__openedDetails=[];
+const showPage=id=>{document.querySelectorAll('#pages>section').forEach(el=>el.classList.toggle('current',el.id===id));document.querySelectorAll('.tabs a').forEach(el=>el.classList.toggle('current',el.dataset.page===id));};
+document.querySelectorAll('.tabs a').forEach(el=>el.addEventListener('click',event=>{event.preventDefault();showPage(el.dataset.page);}));
+document.querySelectorAll('[data-exam]').forEach(el=>el.addEventListener('click',()=>{document.querySelectorAll('[data-exam]').forEach(x=>x.classList.toggle('current',x===el));document.querySelector('#lab').hidden=el.dataset.exam!=='lab';document.querySelector('#imaging').hidden=el.dataset.exam!=='imaging';}));
+const details={
+  'imaging-new':{title:'醫令名稱：胸部合成影像',text:'SYNTHETIC_IMAGING_REPORT'},
+  'imaging-old':{title:'醫令名稱：舊胸部合成影像',text:'OLD_IMAGING_SENTINEL'},
+  'discharge-new':{title:'出院病摘',text:'SYNTHETIC_DISCHARGE_SUMMARY_NEW\n病人姓名：EXCLUDED_SYNTHETIC_NAME\n簽署醫師：EXCLUDED_SYNTHETIC_SIGNER'},
+  'discharge-old':{title:'出院病摘',text:'SYNTHETIC_DISCHARGE_SUMMARY_OLD',delay:250}
+};
+const cover=document.querySelector('.gary-cover');
+document.querySelectorAll('[data-detail]').forEach(el=>el.addEventListener('click',()=>{const key=el.dataset.detail,d=details[key];window.__openedDetails.push(key);cover.classList.add('open');const update=()=>{cover.querySelector('.detail-title').textContent=d.title;cover.querySelector('.show-result-text').textContent=d.text;};if(d.delay)setTimeout(update,d.delay);else update();}));
+cover.querySelector('.close').addEventListener('click',()=>cover.classList.remove('open'));
+</script></body></html>
