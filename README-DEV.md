@@ -53,7 +53,7 @@ node .\src\medcloud-timeout-smoke.js
 ## 版本與發布
 
 1. 更新 `extension/manifest.json` 的版本。
-2. 更新 `README.md` 與 `使用說明.md` 版本說明。
+2. 更新 `README.md` 與 `USER-GUIDE.md` 版本說明。
 3. 執行全部合成與 Playwright 測試。
 4. 執行：
 
