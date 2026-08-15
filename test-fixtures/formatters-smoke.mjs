@@ -12,14 +12,18 @@ const markerAt = source.lastIndexOf(marker);
 assert.notEqual(markerAt, -1, '找不到 content script 結尾');
 
 const instrumented = source.slice(0, markerAt) + `
-  globalThis.__formatterTests = { medToPasteFormat, labToSimpleList, shortDrug };
+  globalThis.__formatterTests = {
+    medToPasteFormat, labToSimpleList, shortDrug, calendarMonthsAgo, recentRows,
+    dedupeAllergyRows, aggregateToPlain
+  };
 ` + source.slice(markerAt);
 
 const document = {
   body: { appendChild() {} },
   getElementById() { return null; },
   querySelectorAll() { return []; },
-  createElement() { return {}; }
+  createElement() { return {}; },
+  addEventListener() {}
 };
 const sandbox = {
   console,
@@ -32,7 +36,10 @@ const sandbox = {
   MutationObserver: class { observe() {} }
 };
 vm.runInNewContext(instrumented, sandbox, { filename: contentPath });
-const { medToPasteFormat, labToSimpleList, shortDrug } = sandbox.__formatterTests;
+const {
+  medToPasteFormat, labToSimpleList, shortDrug, calendarMonthsAgo, recentRows,
+  dedupeAllergyRows
+} = sandbox.__formatterTests;
 
 const roc = raw => {
   const [year, month, day] = raw.split('/').map(Number);
@@ -81,4 +88,31 @@ assert.equal(labText, [
   '- Potassium 4.1 / 4.3'
 ].join('\n'));
 
-console.log(JSON.stringify({ syntax: 'pass', medicationFormatter: 'pass', labFormatter: 'pass' }, null, 2));
+const localDateKey = date => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+assert.equal(localDateKey(calendarMonthsAgo(new Date(2025, 4, 31), 3)), '2025-2-28');
+assert.equal(localDateKey(calendarMonthsAgo(new Date(2024, 4, 31), 3)), '2024-2-29');
+const windowed = recentRows([
+  { date: new Date(2026, 4, 16), value: 'start' },
+  { date: new Date(2026, 4, 15), value: 'old' },
+  { date: new Date(2026, 7, 16), value: 'today' },
+  { date: new Date(2026, 7, 17), value: 'future' },
+  { date: null, value: 'invalid' }
+], 3, new Date(2026, 7, 16));
+assert.equal(Array.from(windowed.rows, row => row.value).join(','), 'start,today');
+assert.equal(windowed.invalidDate.length, 1);
+assert.equal(windowed.future.length, 1);
+assert.equal(windowed.outsideRange.length, 1);
+
+const allergy = dedupeAllergyRows([
+  { code: 'ALG001', drug: 'TEST ALLERGEN', reaction: 'Rash', dateRaw: '115/01/01', date: roc('115/01/01'), src: '甲', note: '' },
+  { code: '', drug: 'Test Allergen', reaction: 'Itching', dateRaw: '115/02/01', date: roc('115/02/01'), src: '乙', note: 'note' },
+  { code: '-', drug: 'SECOND ALLERGEN', reaction: 'Rash', dateRaw: '115/03/01', date: roc('115/03/01'), src: '甲', note: '' },
+  { code: 'N/A', drug: 'THIRD ALLERGEN', reaction: 'Rash', dateRaw: '115/04/01', date: roc('115/04/01'), src: '甲', note: '' }
+]);
+assert.equal(allergy.length, 3, '缺碼占位不得把不同藥物合併');
+assert.equal(allergy.find(row => row.code === 'ALG001').reactions.join(','), 'Rash,Itching');
+
+console.log(JSON.stringify({
+  syntax: 'pass', medicationFormatter: 'pass', labFormatter: 'pass',
+  calendarMonths: 'pass', allergyDeduplication: 'pass'
+}, null, 2));
