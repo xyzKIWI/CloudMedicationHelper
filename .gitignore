@@ -1,0 +1,8 @@
+.backup-*/
+.medcloud-output/
+node_modules/
+.env
+.env.*
+*.zip
+*.zip.sha256.txt
+CloudMedicationHelper-*/

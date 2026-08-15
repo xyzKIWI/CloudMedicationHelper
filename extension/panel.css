@@ -1,0 +1,177 @@
+#nhi-helper-btn{
+  position:fixed; right:18px; bottom:18px; z-index:2147483646;
+  background:#0f6e64; color:#fff; border:0; border-radius:24px;
+  padding:11px 20px; font-size:15px; font-weight:700; cursor:pointer;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  box-shadow:0 3px 12px rgba(0,0,0,.28);
+}
+#nhi-helper-btn:hover{ background:#0b5a52; }
+
+#nhi-helper-root{
+  position:fixed; right:18px; top:18px; bottom:18px; width:min(560px,92vw);
+  z-index:2147483647; background:#fff; border:1px solid #cfdedd; border-radius:12px;
+  box-shadow:0 8px 34px rgba(0,0,0,.3); display:flex; flex-direction:column;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  color:#132020; line-height:1.6; font-size:14px;
+}
+#nhi-helper-root .nh-head{
+  padding:12px 14px; border-bottom:1px solid #e2edec; display:flex; align-items:center; gap:10px;
+  background:#f4f9f9; border-radius:12px 12px 0 0;
+}
+#nhi-helper-root .nh-head b{ font-size:16px; color:#0f6e64; }
+#nhi-helper-root .nh-sub{ font-size:12px; color:#0a7d43; background:#eafaf0;
+  border:1px solid #b5e3c8; border-radius:20px; padding:1px 9px; }
+#nhi-helper-root .nh-x{ margin-left:auto; border:0; background:transparent; font-size:22px;
+  line-height:1; cursor:pointer; color:#5f7070; padding:0 4px; }
+#nhi-helper-root .nh-body{ overflow:auto; padding:12px 14px; flex:1; }
+#nhi-helper-root .nh-foot{ padding:10px 14px; border-top:1px solid #e2edec; display:flex;
+  align-items:center; gap:8px; flex-wrap:wrap; background:#f9fcfc; border-radius:0 0 12px 12px; }
+#nhi-helper-root .nh-btn{ background:#0f6e64; color:#fff; border:0; border-radius:7px;
+  padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; }
+#nhi-helper-root .nh-btn:hover{ background:#0b5a52; }
+#nhi-helper-root .nh-btn:disabled{ opacity:.58; cursor:wait; }
+#nhi-helper-root .nh-msg{ font-size:13px; color:#0a7d43; }
+#nhi-helper-root .nh-clipwarn{ flex-basis:100%; font-size:11.5px; color:#8a4b16; }
+
+#nhi-helper-root .nh-stat{ display:flex; flex-wrap:wrap; gap:6px 14px; padding:9px 11px;
+  background:#f4f9f9; border:1px solid #e2edec; border-radius:8px; font-size:13px; }
+#nhi-helper-root .nh-stat b{ color:#0f6e64; font-size:15px; }
+#nhi-helper-root .nh-warn{ color:#b4540a; }
+#nhi-helper-root .nh-warn b{ color:#b4540a; }
+#nhi-helper-root .nh-note{ font-size:12.5px; color:#5f7070; margin:7px 0; }
+#nhi-helper-root .nh-h{ font-size:15px; margin:18px 0 6px; padding-bottom:5px;
+  border-bottom:2px solid #0f6e64; color:#0f6e64; }
+#nhi-helper-root .nh-hw{ border-bottom-color:#c0562c; color:#b4540a; }
+#nhi-helper-root .nh-cls{ font-size:12.5px; color:#5f7070; background:#f4f9f9;
+  border-radius:5px; padding:3px 9px; margin:11px 0 5px; display:inline-block; }
+#nhi-helper-root .nh-drug{ border-left:3px solid #0f6e64; padding:5px 0 5px 10px; margin:0 0 8px; }
+#nhi-helper-root .nh-d1{ font-weight:700; }
+#nhi-helper-root .nh-d1 em{ font-style:normal; font-size:11.5px; margin-left:7px; }
+#nhi-helper-root .nh-d2{ font-size:13px; }
+#nhi-helper-root .nh-d2 b{ color:#0f6e64; }
+#nhi-helper-root .nh-d3{ font-size:11.5px; color:#5f7070; word-break:break-all; }
+#nhi-helper-root .nh-dup{ border:1px solid #f0c69a; background:#fff4e8; border-radius:8px;
+  padding:9px 11px; margin:0 0 9px; }
+#nhi-helper-root .nh-dupname{ font-weight:700; color:#b4540a; }
+#nhi-helper-root .nh-dupname code{ font-size:11.5px; background:#fff; padding:1px 5px;
+  border-radius:4px; color:#5f7070; }
+#nhi-helper-root .nh-dupline{ font-size:12.5px; margin-top:4px; }
+#nhi-helper-root .nh-dupline span{ color:#5f7070; display:block; font-size:11.5px; }
+#nhi-helper-root .nh-clinics{ display:flex; flex-wrap:wrap; gap:6px; }
+#nhi-helper-root .nh-clinics span{ font-size:12.5px; background:#f4f9f9; border:1px solid #e2edec;
+  border-radius:20px; padding:2px 10px; }
+#nhi-helper-root .nh-d2 em.nh-rf{ font-style:normal; font-size:11.5px; color:#5f7070; }
+#nhi-helper-root .nh-btn.nh-ghost{ background:#fff; color:#0f6e64; border:1px solid #0f6e64; }
+#nhi-helper-root .nh-btn.nh-ghost:hover{ background:#f4f9f9; }
+
+/* ── 用藥時序 ───────────────────────────────── */
+#nhi-helper-root .nh-tl{ border-left:3px solid #93b8b3; padding:4px 0 4px 10px; margin:0 0 9px; }
+#nhi-helper-root .nh-tlname{ font-weight:700; }
+#nhi-helper-root .nh-tlname em{ font-style:normal; font-size:11.5px; margin-left:7px; }
+#nhi-helper-root .nh-tlname em.nh-off{ color:#5f7070; background:#eef3f3;
+  border-radius:4px; padding:1px 6px; }
+#nhi-helper-root .nh-tlseq{ display:flex; flex-wrap:wrap; align-items:center; gap:3px; margin:4px 0; }
+#nhi-helper-root .nh-tlseq b{ color:#93b8b3; font-size:12px; }
+#nhi-helper-root .nh-ev{ font-size:12px; background:#eafaf0; border:1px solid #b5e3c8;
+  border-radius:5px; padding:1px 7px; white-space:nowrap; }
+#nhi-helper-root .nh-ev i{ font-style:normal; color:#5f7070; margin-left:4px; font-size:11px; }
+
+/* ── 檢視切換 tab ───────────────────────────── */
+#nhi-helper-root .nh-tabs{ display:flex; gap:6px; margin:14px 0 4px;
+  border-bottom:1px solid #e2edec; padding-bottom:8px; }
+#nhi-helper-root .nh-tab{ font-family:inherit; font-size:13px; cursor:pointer;
+  background:#fff; color:#5f7070; border:1px solid #cfdedd; border-radius:7px;
+  padding:6px 12px; display:flex; align-items:center; gap:6px; }
+#nhi-helper-root .nh-tab:hover{ background:#f4f9f9; }
+#nhi-helper-root .nh-tab.on{ background:#0f6e64; color:#fff; border-color:#0f6e64; }
+#nhi-helper-root .nh-tab kbd{ font-family:inherit; font-size:10.5px; line-height:1;
+  background:#eef3f3; color:#5f7070; border-radius:3px; padding:2px 4px; }
+#nhi-helper-root .nh-tab.on kbd{ background:rgba(255,255,255,.25); color:#fff; }
+#nhi-helper-root .nh-tab em{ font-style:normal; font-size:11px; opacity:.75; }
+#nhi-helper-root .nh-h .nh-hn{ font-size:11.5px; color:#5f7070; font-weight:400; margin-left:8px; }
+
+/* ── 依院所檢視 ─────────────────────────────── */
+#nhi-helper-root .nh-sw{ display:inline-block; width:10px; height:10px; border-radius:3px;
+  margin-right:6px; vertical-align:middle; }
+#nhi-helper-root .nh-visit{ border:1px solid #e2edec; border-radius:8px; padding:8px 10px; margin:0 0 8px; }
+#nhi-helper-root .nh-vhead{ font-size:12.5px; color:#0f6e64; font-weight:700;
+  border-bottom:1px dashed #e2edec; padding-bottom:5px; margin-bottom:5px; }
+#nhi-helper-root .nh-vn{ float:right; color:#5f7070; font-weight:400; font-size:11.5px; }
+#nhi-helper-root .nh-vitem{ padding:3px 0; font-size:13px; }
+#nhi-helper-root .nh-vitem span{ font-size:12px; color:#5f7070; margin-left:8px; }
+#nhi-helper-root .nh-vitem em{ font-style:normal; font-size:11px; margin-left:6px; }
+#nhi-helper-root .nh-vdone{ opacity:.55; }
+#nhi-helper-root .nh-legend{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px;
+  color:#5f7070; margin:6px 0 10px; }
+#nhi-helper-root .nh-sect{ font-size:12px; color:#5f7070; letter-spacing:.06em;
+  margin:18px 0 0; padding-bottom:2px; }
+#nhi-helper-root .nh-h .nh-type{ font-style:normal; font-size:11px; font-weight:400;
+  background:#eafaf0; color:#0a7d43; border:1px solid #b5e3c8; border-radius:20px;
+  padding:1px 8px; margin-left:8px; vertical-align:middle; }
+#nhi-helper-root .nh-h .nh-type.nh-typep{ background:#fff4e8; color:#b4540a; border-color:#f0c69a; }
+#nhi-helper-root .nh-warnbox{ border:1px solid #f0c69a; background:#fff4e8; border-radius:8px;
+  padding:9px 11px; margin:8px 0; font-size:12.5px; color:#7a4418; line-height:1.65; }
+
+/* ── 用藥甘特圖 ─────────────────────────────── */
+#nhi-helper-root .nh-gwrap{ border:1px solid #e2edec; border-radius:8px; padding:8px 10px 10px; }
+#nhi-helper-root .nh-gaxis{ position:relative; height:16px; margin-left:132px;
+  border-bottom:1px solid #e2edec; margin-bottom:6px; }
+#nhi-helper-root .nh-gt{ position:absolute; top:1px; font-size:10.5px; color:#93a3a3;
+  transform:translateX(-50%); white-space:nowrap; }
+#nhi-helper-root .nh-grow{ display:flex; align-items:center; gap:0; margin:3px 0; }
+#nhi-helper-root .nh-glabel{ width:126px; flex:0 0 126px; font-size:12px; padding-right:6px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#nhi-helper-root .nh-glabel em{ font-style:normal; font-size:10px; color:#5f7070;
+  background:#eef3f3; border-radius:3px; padding:1px 4px; margin-left:4px; }
+#nhi-helper-root .nh-gtrack{ position:relative; flex:1; height:15px; background:#f7fafa;
+  border-radius:3px; overflow:hidden; }
+#nhi-helper-root .nh-gl{ position:absolute; top:0; bottom:0; width:1px; background:#e6eeee; }
+#nhi-helper-root .nh-gtoday{ position:absolute; top:0; bottom:0; width:1.5px; background:#d4452a; z-index:2; }
+#nhi-helper-root .nh-gbar{ position:absolute; top:2px; height:11px; border-radius:3px; min-width:2px; }
+#nhi-helper-root .nh-k0,#nhi-helper-root .nh-gbar.nh-k0{ background:#0f6e64; }
+#nhi-helper-root .nh-k1,#nhi-helper-root .nh-gbar.nh-k1{ background:#c07a2c; }
+#nhi-helper-root .nh-k2,#nhi-helper-root .nh-gbar.nh-k2{ background:#3d6ba8; }
+#nhi-helper-root .nh-k3,#nhi-helper-root .nh-gbar.nh-k3{ background:#7a5aa8; }
+#nhi-helper-root .nh-k4,#nhi-helper-root .nh-gbar.nh-k4{ background:#4a8c4a; }
+#nhi-helper-root .nh-k5,#nhi-helper-root .nh-gbar.nh-k5{ background:#a8475f; }
+
+/* ── 檢驗迷你折線圖 ─────────────────────────── */
+#nhi-helper-root .nh-sparkcell{ padding:1px 4px !important; }
+#nhi-helper-root .nh-spark{ display:block; }
+#nhi-helper-root .nh-spark .nh-band{ fill:#e4f4ea; }
+#nhi-helper-root .nh-spark .nh-line{ fill:none; stroke:#0f6e64; stroke-width:1.3; }
+#nhi-helper-root .nh-spark .nh-dot{ fill:#0f6e64; }
+#nhi-helper-root .nh-spark .nh-dotbad{ fill:#c0562c; }
+
+/* ── 檢驗大表格 ─────────────────────────────── */
+#nhi-helper-root.nh-wide{ width:min(1060px,96vw); }
+#nhi-helper-root .nh-tblwrap{ overflow:auto; max-height:56vh; border:1px solid #e2edec;
+  border-radius:8px; }
+#nhi-helper-root .nh-tbl{ border-collapse:separate; border-spacing:0; font-size:12.5px;
+  white-space:nowrap; }
+#nhi-helper-root .nh-tbl th, #nhi-helper-root .nh-tbl td{
+  border-bottom:1px solid #eef3f3; border-right:1px solid #eef3f3; padding:4px 9px; text-align:left; }
+#nhi-helper-root .nh-tbl thead th{ position:sticky; top:0; z-index:2; background:#f4f9f9;
+  color:#0f6e64; font-weight:700; }
+#nhi-helper-root .nh-tbl .nh-sticky{ position:sticky; left:0; z-index:1; background:#fff;
+  white-space:normal; min-width:150px; max-width:260px; }
+#nhi-helper-root .nh-tbl thead .nh-sticky{ z-index:3; background:#f4f9f9; }
+#nhi-helper-root .nh-tbl .nh-tr{ font-style:normal; color:#5f7070; margin-left:5px; }
+#nhi-helper-root .nh-tbl .nh-ref{ color:#5f7070; }
+#nhi-helper-root .nh-labmeta{ display:block; margin-top:2px; color:#5f7070; font-size:10.5px;
+  font-weight:400; white-space:normal; }
+#nhi-helper-root .nh-tbl .nh-na{ color:#c3d2d1; text-align:center; }
+#nhi-helper-root .nh-tbl .nh-bad{ color:#b4540a; font-weight:700; background:#fff4e8; }
+#nhi-helper-root .nh-tbl .nh-catrow td{ background:#f4f9f9; color:#5f7070; font-size:12px;
+  position:sticky; left:0; }
+
+/* ── 影像／病理報告匯出 ───────────────────────────────── */
+#nhi-helper-root .nh-progress{ min-height:22px; margin:7px 0; color:#0f6e64; font-size:12.5px; }
+#nhi-helper-root .nh-reportwrap{ max-height:62vh; }
+#nhi-helper-root .nh-reporttbl{ white-space:normal; min-width:980px; }
+#nhi-helper-root .nh-reporttbl th:nth-child(1){ min-width:90px; }
+#nhi-helper-root .nh-reporttbl th:nth-child(2){ min-width:180px; }
+#nhi-helper-root .nh-reporttbl th:nth-child(3){ min-width:430px; }
+#nhi-helper-root .nh-reporttbl th:nth-child(4){ min-width:120px; }
+#nhi-helper-root .nh-reporttbl th:nth-child(5){ min-width:150px; }
+#nhi-helper-root .nh-reporttext{ white-space:normal; line-height:1.5; word-break:break-word; }

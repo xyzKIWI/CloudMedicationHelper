@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>合成檢驗結果測試頁（無真實病歷）</title>
+<!-- 全部為虛構資料，只用來驗證 content.js 的檢驗解析、樞紐與折線圖。
+     欄位格式刻意照真實頁面：參考值是 [下限][上限] 兩個中括號、檢驗結果把單位接在值後面。 -->
+<table><thead><tr>
+<th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>檢驗項目</th><th>檢驗結果</th><th>單位</th><th>參考值</th>
+<th>檢驗方法</th><th>檢體採檢方法</th><th>檢驗類別</th><th>來源</th><th>費用年月</th><th>註記</th></tr></thead></table>
+<table id="real"><thead><tr>
+<th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>檢驗項目</th><th>檢驗結果</th><th>單位</th><th>參考值</th>
+<th>檢驗方法</th><th>檢體採檢方法</th><th>檢驗類別</th><th>來源</th><th>費用年月</th><th>註記</th></tr></thead>
+<tbody>
+<!-- 三個檢驗日：115/02/10、115/05/12、115/08/03（刻意不照順序排，測日期排序） -->
+
+<!-- 數值型、三點上升且最後一點超標 → 折線圖應為上升線、最後一點紅、趨勢 ↑ -->
+<tr><td>1</td><td>115/05/12</td><td>血糖(飯前)</td><td>Glucose AC</td><td>108 mg/dL</td><td>mg/dL</td><td>[70][99]</td><td>酵素法</td><td>靜脈血</td><td>生化學檢查</td><td>甲醫院 1234567890</td><td>11505</td><td></td></tr>
+<tr><td>2</td><td>115/02/10</td><td>血糖(飯前)</td><td>Glucose AC</td><td>95 mg/dL</td><td>mg/dL</td><td>[70][99]</td><td>酵素法</td><td>靜脈血</td><td>生化學檢查</td><td>甲醫院 1234567890</td><td>11502</td><td></td></tr>
+<tr><td>3</td><td>115/08/03</td><td>血糖(飯前)</td><td>Glucose AC</td><td>126 mg/dL</td><td>mg/dL</td><td>[70][99]</td><td>酵素法</td><td>靜脈血</td><td>生化學檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+
+<!-- 數值型、下降且低於下限 → 趨勢 ↓、最後一點紅 -->
+<tr><td>4</td><td>115/02/10</td><td>血色素</td><td>Hemoglobin</td><td>14.2 g/dL</td><td>g/dL</td><td>[13.5][17.5]</td><td>比色法</td><td>靜脈血</td><td>血液學檢查</td><td>甲醫院 1234567890</td><td>11502</td><td></td></tr>
+<tr><td>5</td><td>115/08/03</td><td>血色素</td><td>Hemoglobin</td><td>12.1 g/dL</td><td>g/dL</td><td>[13.5][17.5]</td><td>比色法</td><td>靜脈血</td><td>血液學檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+
+<!-- 只有上限（[無][＜0.5]）→ 帶不等號的參考值 -->
+<tr><td>6</td><td>115/08/03</td><td>C反應蛋白</td><td>CRP</td><td>0.8 mg/dL</td><td>mg/dL</td><td>[無][＜0.5]</td><td>免疫比濁法</td><td>靜脈血</td><td>生化學檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+
+<!-- 定性型：參考值 Negative、結果 4+ → 應標 A（定性異常），且不畫折線 -->
+<tr><td>7</td><td>115/08/03</td><td>尿蛋白</td><td>Urine Protein</td><td>4+ 　</td><td></td><td>[Negative][]</td><td>試紙法</td><td>尿液</td><td>尿液檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+<!-- 定性型且正常 → 不標 -->
+<tr><td>8</td><td>115/08/03</td><td>尿糖</td><td>Urine Glucose</td><td>Negative 　</td><td></td><td>[Negative][]</td><td>試紙法</td><td>尿液</td><td>尿液檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+
+<!-- 範圍型結果（0-5 /HPF），參考值 [0][5] → 取上界比對，5 不超標 -->
+<tr><td>9</td><td>115/08/03</td><td>尿沉渣白血球</td><td>Urine WBC</td><td>0-5 /HPF</td><td>/HPF</td><td>[0][5]</td><td>鏡檢</td><td>尿液</td><td>尿液檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+
+<!-- 同一項目同一天兩筆（不同醫令）→ 應併成一格、以 " / " 分隔 -->
+<tr><td>10</td><td>115/08/03</td><td>鉀離子(急)</td><td>Potassium</td><td>4.1 mEq/L</td><td>mEq/L</td><td>[3.5][5.1]</td><td>電極法</td><td>靜脈血</td><td>生化學檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+<tr><td>11</td><td>115/08/03</td><td>鉀離子(常規)</td><td>Potassium</td><td>4.3 mEq/L</td><td>mEq/L</td><td>[3.5][5.1]</td><td>電極法</td><td>靜脈血</td><td>生化學檢查</td><td>乙診所 9876543210</td><td>11508</td><td></td></tr>
+</tbody></table>

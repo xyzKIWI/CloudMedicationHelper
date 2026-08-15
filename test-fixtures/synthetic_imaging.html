@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>影像及病理合成測試</title>
+  <style>
+    body { font-family: sans-serif; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #bbb; padding: 6px; vertical-align: top; }
+    .floating-head { position: fixed; top: 0; left: 0; }
+    .gary-cover { display: none; position: fixed; inset: 0; background: rgb(0 0 0 / 45%); z-index: 10; }
+    .gary-cover.open { display: block; }
+    .flitter-set-box { position: fixed; inset: 12% 14%; padding: 18px; background: white; border: 2px solid #08756a; }
+    .frow-reports { display: contents; } /* 內層容器可能沒有自己的 rect */
+    .show-result-text { white-space: pre-wrap; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <table class="floating-head" aria-hidden="true">
+    <thead><tr>
+      <th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>診療部位</th><th>影像查詢</th><th>報告日期</th>
+      <th>報告結果</th><th>檢驗類別</th><th>來源</th><th>費用年月</th><th>品質通報</th><th>註記</th>
+    </tr></thead>
+  </table>
+
+  <table id="imaging-table">
+    <thead><tr>
+      <th>項次</th><th>檢驗日期</th><th>醫令名稱</th><th>診療部位</th><th>影像查詢</th><th>報告日期</th>
+      <th>報告結果</th><th>檢驗類別</th><th>來源</th><th>費用年月</th><th>品質通報</th><th>註記</th>
+    </tr></thead>
+    <tbody>
+      <tr data-row-id="row-1">
+        <td>EXCLUDED_SEQUENCE_TOKEN</td><td>115/08/10</td><td>胸部X光</td><td>EXCLUDED_BODY_PART_TOKEN</td>
+        <td><a href="#" title="EXCLUDED_IMAGE_LINK_TOKEN">影像</a></td><td>EXCLUDED_REPORT_DATE_TOKEN</td>
+        <td><button type="button" class="source-report">報告</button></td><td>影像醫學檢查</td>
+        <td>甲測試醫院<br>門診<br>0000000000</td><td>EXCLUDED_FEE_MONTH_TOKEN</td>
+        <td>EXCLUDED_QUALITY_TOKEN</td><td>EXCLUDED_NOTE_TOKEN</td>
+      </tr>
+      <tr data-row-id="row-1-duplicate">
+        <td>EXCLUDED_SEQUENCE_TOKEN_DUP</td><td>115/08/11</td><td>胸部X光</td><td>EXCLUDED_BODY_PART_TOKEN_DUP</td>
+        <td><a href="#" title="EXCLUDED_IMAGE_LINK_TOKEN_DUP">影像</a></td><td>EXCLUDED_REPORT_DATE_TOKEN_DUP</td>
+        <td><button type="button" class="source-report">報告</button></td><td>影像醫學檢查</td>
+        <td>甲測試醫院<br>門診<br>0000000000</td><td>EXCLUDED_FEE_MONTH_TOKEN_DUP</td>
+        <td>EXCLUDED_QUALITY_TOKEN_DUP</td><td>EXCLUDED_NOTE_TOKEN_DUP</td>
+      </tr>
+      <tr data-row-id="row-2">
+        <td>EXCLUDED_SEQUENCE_TOKEN_2</td><td>115/08/12</td><td>第四級外科病理</td><td>EXCLUDED_BODY_PART_TOKEN_2</td>
+        <td></td><td>EXCLUDED_REPORT_DATE_TOKEN_2</td>
+        <td><button type="button" class="source-report">報告</button></td><td>病理組織檢查</td>
+        <td>乙測試醫院<br>門診<br>1111111111</td><td>EXCLUDED_FEE_MONTH_TOKEN_2</td>
+        <td>EXCLUDED_QUALITY_TOKEN_2</td><td>EXCLUDED_NOTE_TOKEN_2</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="gary-cover">
+    <section class="flitter-set-box flitter-set-box-m">
+      <button type="button" class="report-close" aria-label="關閉報告">關閉</button>
+      <div class="frow frow-reports">
+        <div class="show-result-title report-order"></div>
+        <div class="show-result-title">報告日期：EXCLUDED_SIGNATURE_TIME_TOKEN</div>
+        <div class="show-result-title">病人姓名：EXCLUDED_PATIENT_NAME_TOKEN</div>
+        <div class="show-result-title">身分證號：EXCLUDED_PATIENT_ID_TOKEN</div>
+        <div class="show-result-text"></div>
+      </div>
+    </section>
+  </div>
+  <script>
+    window.__openedReports = [];
+    const reports = {
+      'row-1': {
+        order: '胸部X光',
+        text: 'Normal ECG'
+      },
+      'row-1-duplicate': {
+        order: '胸部X光',
+        text: 'Normal ECG'
+      },
+      'row-2': {
+        order: '第四級外科病理',
+        text: 'SYNTHETIC_PATH_DIAGNOSIS_ALPHA\nGROSS: synthetic gross description\nMICRO: synthetic microscopic description'
+      }
+    };
+    const cover = document.querySelector('.gary-cover');
+    const surface = document.querySelector('.frow-reports');
+    document.querySelector('.report-close').addEventListener('click', () => cover.classList.remove('open'));
+    document.querySelectorAll('.source-report').forEach((button) => {
+      button.addEventListener('click', () => {
+        const rowId = button.closest('tr').dataset.rowId;
+        window.__openedReports.push(rowId);
+        setTimeout(() => {
+          const report = reports[rowId];
+          surface.querySelector('.report-order').textContent = `醫令名稱：${report.order}`;
+          surface.querySelector('.show-result-text').textContent = `${report.text}\n報告醫師：EXCLUDED_SIGNER_TOKEN`;
+          // 模擬健保頁實測行為：報告 DOM 已更新，但外層彈窗仍未加上 open。
+        }, rowId === 'row-2' ? 90 : 25);
+      });
+    });
+  </script>
+</body>
+</html>

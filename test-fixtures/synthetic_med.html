@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>合成用藥紀錄測試頁（無真實病歷）</title>
+<!-- 全部為虛構資料，只用來驗證 content.js 的解析與時序邏輯 -->
+<table><thead><tr>
+<th>項次</th><th>就醫日期</th><th>來源</th><th>主診斷</th><th>ATC3名稱</th><th>複方註記</th><th>成分名稱</th><th>藥品名稱</th>
+<th>用法用量</th><th>藥品用量</th><th>給藥日數</th><th>單筆餘藥日數試算</th><th>高齡者宜注意用藥品項</th>
+<th>ATC5名稱</th><th>ATC5代碼</th><th>ATC7代碼</th><th>藥品代碼</th></tr></thead></table>
+<table id="real"><thead><tr>
+<th>項次</th><th>就醫日期</th><th>來源</th><th>主診斷</th><th>ATC3名稱</th><th>複方註記</th><th>成分名稱</th><th>藥品名稱</th>
+<th>用法用量</th><th>藥品用量</th><th>給藥日數</th><th>單筆餘藥日數試算</th><th>高齡者宜注意用藥品項</th>
+<th>ATC5名稱</th><th>ATC5代碼</th><th>ATC7代碼</th><th>藥品代碼</th></tr></thead>
+<tbody>
+<!-- A 藥：同一院所連續三次續領，仍在效期內 → 時序 3 次、無中斷、未停 -->
+<tr><td>1</td><td>115/03/01</td><td>甲診所<br>門診<br>1234567890</td><td>原發性高血壓<br>I10</td><td>心血管系統</td><td></td><td>Amlodipine</td><td>NORVASC TABLETS 5MG</td><td>QD</td><td>28</td><td>28</td><td>0</td><td></td><td>Dihydropyridine</td><td>C08CA</td><td>AC00001100</td><td>BC001100</td></tr>
+<tr><td>2</td><td>115/03/29</td><td>甲診所<br>門診<br>1234567890</td><td>原發性高血壓<br>I10</td><td>心血管系統</td><td></td><td>Amlodipine</td><td>NORVASC TABLETS 5MG</td><td>QD</td><td>28</td><td>28</td><td>0</td><td></td><td>Dihydropyridine</td><td>C08CA</td><td>AC00001100</td><td>BC001100</td></tr>
+<tr><td>3</td><td>115/08/01</td><td>甲診所<br>門診<br>1234567890</td><td>原發性高血壓<br>I10</td><td>心血管系統</td><td></td><td>Amlodipine</td><td>NORVASC TABLETS 5MG</td><td>QD</td><td>28</td><td>28</td><td>0</td><td></td><td>Dihydropyridine</td><td>C08CA</td><td>AC00001100</td><td>BC001100</td></tr>
+<!-- B 藥：跨院所同一 ATC7、效期重疊 → 應判重複用藥；時序合成一條、標跨 2 家院所 -->
+<tr><td>4</td><td>115/08/05</td><td>乙醫院<br>門診<br>9876543210</td><td>第二型糖尿病<br>E119</td><td>糖尿病用藥</td><td></td><td>Metformin Hcl</td><td>GLUCOPHAGE TABLETS 500MG</td><td>BID</td><td>56</td><td>28</td><td>0</td><td></td><td>Biguanides</td><td>A10BA</td><td>AC00002100</td><td>BC002100</td></tr>
+<tr><td>5</td><td>115/08/07</td><td>丙診所<br>門診<br>5555555555</td><td>第二型糖尿病<br>E119</td><td>糖尿病用藥</td><td></td><td>Metformin Hcl</td><td>MELBIN TABLETS 500MG</td><td>BID</td><td>56</td><td>28</td><td>0</td><td>Y</td><td>Biguanides</td><td>A10BA</td><td>AC00002100</td><td>BC002100</td></tr>
+<!-- 藥局調劑列：來源第二行是「藥局」→ 依院所檢視要獨立成一段，並顯示無法掛回開立院所的警語 -->
+<tr><td>6</td><td>115/08/06</td><td>丁藥局<br>藥局<br>7777777777</td><td>原發性高血壓<br>I10</td><td>心血管系統</td><td></td><td>Amlodipine</td><td>NORVASC TABLETS 5MG</td><td>QD</td><td>28</td><td>28</td><td>0</td><td></td><td>Dihydropyridine</td><td>C08CA</td><td>AC00001100</td><td>BC001100</td></tr>
+<!-- C 藥：只開過一次且早已結束 → 時序應標「已停」，不列入仍在服用 -->
+<tr><td>6</td><td>115/01/10</td><td>甲診所<br>門診<br>1234567890</td><td>急性咽炎<br>J029</td><td>抗生素</td><td></td><td>Amoxicillin</td><td>AMOXIL CAPSULES 250MG</td><td>TID</td><td>21</td><td>7</td><td>0</td><td></td><td>Penicillins</td><td>J01CA</td><td>AC00003100</td><td>BC003100</td></tr>
+</tbody></table>

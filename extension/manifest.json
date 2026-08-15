@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "雲端藥歷整理小幫手",
+  "version": "1.2.4",
+  "description": "整理健保雲端用藥、檢驗、影像及病理報告，支援複製表格與手動匯出（不連外、不自動上傳）。",
+  "content_scripts": [
+    {
+      "matches": ["https://medcloud2.nhi.gov.tw/imu/*"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": []
+}
