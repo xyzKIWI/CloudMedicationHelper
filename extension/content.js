@@ -1353,7 +1353,7 @@
     const renderPreview = () => {
       const ordered = imagingRowsSorted(a);
       body.innerHTML = `<div class="nh-stat">
-          <span><b>${a.rows.length}</b> 筆檢查</span>
+          <span><b>${a.rows.length}</b> 筆報告</span>
           <span><b data-imaging-captured>${a.captured}</b> 筆已讀取報告</span>
           ${a.missing ? `<span class="nh-warn"><b>${a.missing}</b> 筆無法讀取</span>` : ''}
         </div>
@@ -1450,7 +1450,12 @@
     if (kind === 'imaging') {
       const rows = readImagingRows(pickTableBy(IMAGING_HEADS));
       if (!rows.length) { alert('找到影像及病理表格但沒有可解析的資料列。\n可能是查詢結果為空，或欄位格式與預期不同。'); return; }
-      renderImaging(rows);
+      // 健保雲端會將同一次檢查拆成「影像查詢」與「報告結果」兩列。
+      // 只排除一開始就既無報告內容、也無報告控件的影像伴隨列；有報告
+      // 控件但讀取失敗的列仍須保留，讓使用者看見無法讀取的警示。
+      const reportRows = rows.filter(row => row.report || row.reportControl);
+      if (!reportRows.length) { alert('目前只有影像查詢資料，沒有可整理的報告結果。'); return; }
+      renderImaging(reportRows);
     } else if (kind === 'lab') {
       const rows = readLabRows(pickTableBy(LAB_HEADS));
       if (!rows.length) { alert('找到檢驗表格但沒有可解析的資料列。\n可能是查詢結果為空，或欄位格式與預期不同。'); return; }
