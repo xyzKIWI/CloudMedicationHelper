@@ -9,7 +9,7 @@
 #nhi-helper-btn:disabled{ opacity:.62; cursor:wait; }
 
 #nhi-helper-root{
-  position:fixed; right:18px; top:18px; bottom:18px; width:min(560px,92vw);
+  position:fixed; right:18px; top:128px; bottom:18px; width:min(520px,90vw);
   z-index:2147483647; background:#fff; border:1px solid #cfdedd; border-radius:12px;
   box-shadow:0 8px 34px rgba(0,0,0,.3); display:flex; flex-direction:column;
   font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
@@ -145,7 +145,7 @@
 #nhi-helper-root .nh-spark .nh-dotbad{ fill:#c0562c; }
 
 /* ── 檢驗大表格 ─────────────────────────────── */
-#nhi-helper-root.nh-wide{ width:min(1060px,96vw); }
+#nhi-helper-root.nh-wide{ width:min(1000px,94vw); }
 #nhi-helper-root .nh-tblwrap{ overflow:auto; max-height:56vh; border:1px solid #e2edec;
   border-radius:8px; }
 #nhi-helper-root .nh-tbl{ border-collapse:separate; border-spacing:0; font-size:12.5px;
