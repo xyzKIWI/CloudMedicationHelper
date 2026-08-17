@@ -429,7 +429,7 @@
     return L.join('\n');
   }
 
-  /** 參考 emr-paste-formatter 的精簡藥名：保留商品名、規格與必要的緩釋標記，省略劑型。 */
+  /** 成分名稱缺漏時，供藥品識別／去重使用的精簡商品名備援。 */
   const MED_FORM = /^(?:TABLETS?|TAB|CAPSULES?|CAP|CAPS|ENTERIC[\w-]*|PROLONGED-RELEASE|EXTENDED[\w-]*|FILM[\w-]*|F\.?C\.?|SUGAR[\w-]*|ORAL|EYE|DROPS?|LOTION|OINTMENT|CREAM|GEL|SYRUP|SOLUTION|SUSPENSION|MIXTURE|LIQUID|EFFERVESCENT|INJECTION|INJ|PATCH|PLASTER|SPRAY|SUPPOSITOR(?:Y|IES)|POWDER|GRANULES?|S\.?R\.?M\.?C\.?|MICROENCAPSULATED)$/i;
   const MED_FORM_MOD = /^(?:SOFT|HARD|COATED|CHEWABLE|DISPERSIBLE|DELAYED|CONTROLLED|SUSTAINED|IMMEDIATE|MODIFIED|GASTRO-RESISTANT)$/i;
   const MED_EXTRA = /^(?:SR|XL|XR|CR|ER|LA|MR|DEPOT|FORTE|RETARD)$/i;
@@ -488,7 +488,7 @@
       const visit = visits.get(visitKey);
       if (r.dx && (r.dx.code || r.dx.name)) visit.diagnoses.set(`${r.dx.code}|${r.dx.name}`, r.dx);
       const sigDays = `${r.sig || ''}${r.days !== null ? `×${r.days}d` : ''}`;
-      const item = `${shortDrug(r.drug)}${sigDays ? ` ${sigDays}` : ''}`;
+      const item = `${r.ingr || '未對應成分'}${sigDays ? ` ${sigDays}` : ''}`;
       if (!visit.items.includes(item)) visit.items.push(item);
     }
 
