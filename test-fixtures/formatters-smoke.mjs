@@ -46,26 +46,33 @@ const roc = raw => {
   return new Date(year + 1911, month - 1, day);
 };
 const dx = { code: 'I10', name: '原發性高血壓' };
-const medRow = (dateRaw, src, srcType, atc7, drug, sig = 'QD', days = 28) => ({
+const medRow = (dateRaw, src, srcType, atc7, drug, ingr = '', sig = 'QD', days = 28) => ({
   dateRaw, date: roc(dateRaw), src, srcType, srcKey: `${src}|${srcType}`, dx,
-  atc7, ingr: '', drug, sig, days
+  atc7, ingr, drug, sig, days
 });
 
 assert.equal(shortDrug('NORVASC TABLETS 5MG'), 'Norvasc 5mg');
 assert.equal(shortDrug('CADUET TABLETS 5MG/20MG'), 'Caduet 5mg/20mg');
 
 const medText = medToPasteFormat({ rows: [
-  medRow('115/08/10', '甲診所', '門診', 'A001', 'NORVASC TABLETS 5MG'),
-  medRow('115/08/10', '甲診所', '門診', 'A002', 'COZAAR TABLETS 50MG'),
-  medRow('115/07/01', '甲診所', '門診', 'A001', 'NORVASC TABLETS 5MG'),
-  medRow('115/08/09', '丁藥局', '藥局', 'A003', 'ASPIRIN TABLETS 100MG')
+  medRow('115/08/10', '甲診所', '門診', 'A001', 'NORVASC TABLETS 5MG', 'Amlodipine'),
+  medRow('115/08/10', '甲診所', '門診', 'A002', 'COZAAR TABLETS 50MG', 'Losartan'),
+  medRow('115/07/01', '甲診所', '門診', 'A001', 'NORVASC TABLETS 5MG', 'Amlodipine'),
+  medRow('115/08/09', '丁藥局', '藥局', 'A003', 'ASPIRIN TABLETS 100MG', 'Aspirin')
 ] });
 assert.equal(medText, [
-  '115/08/10 甲診所（I10 原發性高血壓）：Norvasc 5mg QD×28d、Cozaar 50mg QD×28d',
-  '115/08/09 丁藥局（I10 原發性高血壓）：Aspirin 100mg QD×28d'
+  '115/08/10 甲診所（I10 原發性高血壓）：Amlodipine QD×28d、Losartan QD×28d',
+  '115/08/09 丁藥局（I10 原發性高血壓）：Aspirin QD×28d'
 ].join('\n'));
+assert.ok(!medText.includes('Norvasc') && !medText.includes('Cozaar'), '精簡藥歷不應輸出商品名');
 assert.ok(!medText.includes('【醫療院所') && !medText.includes('【藥局'), '精簡藥歷不應依醫院／藥局分段');
 assert.ok(!medText.includes('115/07/01'), '重複用藥應只保留最新日期');
+
+const missingIngredientText = medToPasteFormat({ rows: [
+  medRow('115/08/08', '甲診所', '門診', 'A004', 'UNKNOWN BRAND TABLETS 10MG')
+] });
+assert.ok(missingIngredientText.includes('未對應成分'), '成分名稱缺漏時應明確標示');
+assert.ok(!missingIngredientText.includes('Unknown Brand'), '成分名稱缺漏時不應退回商品名');
 
 const labRow = (item, result, ref, extra = {}) => ({
   dateRaw: '115/08/03', date: roc('115/08/03'), src: '乙診所', item,
