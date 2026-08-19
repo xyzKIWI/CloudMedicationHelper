@@ -2,8 +2,8 @@
  *
  * 設計原則（刻意的限制，改動前請先想清楚）：
  * 1. **完全不連外**：整支檔案沒有 fetch／XMLHttpRequest／WebSocket，manifest 的
- *    permissions 也是空的。病人資料只在這個分頁的記憶體裡處理完就丟掉，
- *    不寫 localStorage、不寫 chrome.storage。這是處理健保雲端資料的底線。
+ *    permissions 也是空的。病人資料只在分頁與 extension service worker 的暫時
+ *    記憶體裡處理完就丟掉，不寫 localStorage、不寫 chrome.storage。
  * 2. **不改原始資料**：單頁整理只讀表格；整合摘要只會依序切換既有頁籤、
  *    開啟原頁報告，絕不代按查詢、修改或送出病歷資料。
  * 3. **看得到什麼就整理什麼**：頁面上沒查出來的資料，這支也不會去要。
@@ -13,6 +13,73 @@
  */
 (() => {
   'use strict';
+  const DISCHARGE_RELAY_PORT = 'nhi-discharge-diagnosis';
+  const SHOWXML_CONTROL_PORT = 'nhi-showxml-control';
+  const SHOWXML_INITIAL_WAIT_MS = 80000;
+  const SHOWXML_REQUEST_WAIT_MS = 45000;
+
+  /** ShowXml 是另開頁：只讀指定欄位，透過 extension 記憶體送回原摘要頁。 */
+  function relayShowXmlDischargeDiagnosis() {
+    const normalizedLabel = value => String(value || '').replace(/[\s：:]/g, '');
+    const cellText = cell => String(cell && (cell.innerText || cell.textContent) || '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .map(line => line.replace(/[ \t\f\v]+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n');
+    const labeledValue = label => {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const inlinePattern = new RegExp(`^\\s*${escapedLabel}\\s*[：:]?\\s*([\\s\\S]+)$`);
+      for (const row of document.querySelectorAll('tr')) {
+        const cells = [...row.children].filter(cell => /^(?:TH|TD)$/.test(cell.tagName));
+        for (let index = 0; index < cells.length; index += 1) {
+          const raw = cellText(cells[index]);
+          if (normalizedLabel(raw) === label) return cellText(cells[index + 1]);
+          const inline = raw.match(inlinePattern);
+          if (inline && inline[1].trim()) return inline[1].trim();
+        }
+      }
+      return '';
+    };
+    const sanitizedDiagnosis = raw => String(raw || '').replace(/\r/g, '').split('\n')
+      .map(line => line.replace(/[ \t\f\v]+/g, ' ').trim())
+      .filter(line => line && !/^(?:病人姓名|患者姓名|姓名|身分證號|身份證號|病歷號|出生日期|性別|電話|聯絡電話|地址)\s*[：:]/i.test(line))
+      .join('\n').trim();
+    const attempt = (deadline = Date.now() + SHOWXML_INITIAL_WAIT_MS) => {
+      const diagnosis = sanitizedDiagnosis(labeledValue('出院診斷'));
+      if (!diagnosis) {
+        if (Date.now() < deadline) setTimeout(() => attempt(deadline), 160);
+        return;
+      }
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+      chrome.runtime.sendMessage({
+        type: 'showxml-discharge-diagnosis',
+        payload: {
+          diagnosis,
+          dischargeDate: labeledValue('出院日期'),
+          facilityCode: labeledValue('醫療機構代碼')
+        }
+      }, response => {
+        const failed = !!chrome.runtime.lastError || !response || response.accepted < 1;
+        if (failed && Date.now() < deadline) setTimeout(() => attempt(deadline), 240);
+      });
+    };
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.connect) {
+      try {
+        const controlPort = chrome.runtime.connect({ name: SHOWXML_CONTROL_PORT });
+        controlPort.onMessage.addListener(message => {
+          if (message && message.type === 'extract-current') attempt(Date.now() + SHOWXML_REQUEST_WAIT_MS);
+        });
+      } catch (error) { /* 初始 sendMessage 仍可使用。 */ }
+    }
+    attempt();
+  }
+
+  if (/\/ShowXml\/?$/i.test(location.pathname)) {
+    relayShowXmlDischargeDiagnosis();
+    return;
+  }
+
   const ID = 'nhi-helper-root', BTN = 'nhi-helper-btn', DAY_MS = 86400000;
   let activePanelFingerprint = '', aggregateRunning = false;
   if (document.getElementById(ID)) return;
@@ -1133,7 +1200,7 @@
       const tds = [...tr.children], admissionRaw = cellAt(tds, col.admission);
       if (!admissionRaw || admissionRaw === '住院日期') continue;
       const summaryCell = tds[col.summary];
-      const summaryControl = [...summaryCell.querySelectorAll('a, button, [role="button"]')]
+      const diagnosisControl = [...summaryCell.querySelectorAll('a, button, [role="button"]')]
         .find(el => /病摘/.test(txt(el)) && isVisible(el)) || null;
       const inline = displayText(summaryCell).split('\n')
         .filter(line => !/^(?:開啟此筆病摘|病摘)$/.test(line)).join('\n').trim();
@@ -1142,14 +1209,14 @@
         sourceIndex, key: [admissionRaw, dischargeRaw, dx, src, sourceIndex].join('|'),
         admissionRaw, dischargeRaw, date: rocDateFromText(dischargeRaw) || rocDateFromText(admissionRaw),
         dept: cellAt(tds, col.dept), dx, src,
-        summary: inline.length >= 20 ? sanitizeDischargeText(inline) : '', summaryControl
+        diagnosis: inline.length >= 20 ? sanitizeDischargeDiagnosis(inline) : '', diagnosisControl
       });
       sourceIndex += 1;
     }
     return out.sort((a, b) => (b.date || 0) - (a.date || 0));
   }
 
-  function sanitizeDischargeText(raw) {
+  function sanitizeDischargeDiagnosis(raw) {
     const privateLabel = /^(?:病人姓名|患者姓名|姓名|身分證號|身份證號|病歷號|出生日期|性別|電話|聯絡電話|地址)\s*[：:]/i;
     const signatureLabel = /^(?:報告醫師|主治醫師|住院醫師|簽署醫師|醫師姓名|Electronically\s+Signed)\s*[：:]?/i;
     return String(raw || '').replace(/\r/g, '').split('\n')
@@ -1159,15 +1226,46 @@
       .join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  async function waitForDischargeSummary(row, before, cancelled, timeoutMs = 12000) {
+  function startDischargeDiagnosisRelay(row) {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.connect) return null;
+    try {
+      const port = chrome.runtime.connect({ name: DISCHARGE_RELAY_PORT });
+      const random = typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const state = { value: '' };
+      let settleReady;
+      const ready = new Promise(resolve => {
+        let settled = false;
+        settleReady = value => { if (!settled) { settled = true; resolve(value); } };
+        setTimeout(() => settleReady(false), 1000);
+      });
+      port.onMessage.addListener(message => {
+        if (!message || message.requestId !== random) return;
+        if (message.type === 'registered') settleReady(true);
+        if (message.type === 'result') {
+          state.value = sanitizeDischargeDiagnosis(message.diagnosis);
+        }
+      });
+      port.postMessage({
+        type: 'start', requestId: random,
+        expectedDischargeDate: row.dischargeRaw,
+        expectedFacilityCode: (String(row.src || '').match(/\b\d{8,12}\b/g) || []).slice(-1)[0] || ''
+      });
+      return { state, ready, close: () => { try { port.disconnect(); } catch (error) { /* 已中斷 */ } } };
+    } catch (error) { return null; }
+  }
+
+  async function waitForDischargeDiagnosis(row, before, cancelled, relay, timeoutMs = 35000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (cancelled()) throw new Error('cancelled');
+      if (relay && relay.state.value) return relay.state.value;
       const currentTable = pickTableBy(DISCHARGE_HEADS);
       const current = currentTable && readDischargeRows(currentTable).find(item => item.key === row.key);
-      if (current && current.summary) return sanitizeDischargeText(current.summary);
+      if (current && current.diagnosis) return sanitizeDischargeDiagnosis(current.diagnosis);
       for (const surface of reportSurfaceCandidates()) {
-        const value = sanitizeDischargeText(reportBodyText(surface));
+        const value = sanitizeDischargeDiagnosis(reportBodyText(surface));
         const changed = before.get(surface) !== reportSurfaceSignature(surface);
         // 出院病摘不可只因視窗已顯示就接受；重用 modal 可能先短暫顯示上一筆內容。
         // 必須確認本次點擊後 DOM 內容簽章實際改變，否則寧可標示無法讀取。
@@ -1181,7 +1279,7 @@
     return '';
   }
 
-  async function captureDischargeSummaries(a, progress, cancelled) {
+  async function captureDischargeDiagnoses(a, progress, cancelled) {
     let captured = 0, missing = 0;
     for (let index = 0; index < a.rows.length; index += 1) {
       if (cancelled()) throw new Error('cancelled');
@@ -1190,14 +1288,38 @@
       const currentTable = pickTableBy(DISCHARGE_HEADS);
       const current = currentTable && readDischargeRows(currentTable).find(row => row.key === target.key);
       if (!current) { missing += 1; continue; }
-      if (current.summary) target.summary = sanitizeDischargeText(current.summary);
-      else if (current.summaryControl) {
-        const before = reportSnapshot();
-        current.summaryControl.click();
-        target.summary = await waitForDischargeSummary(target, before, cancelled);
+      if (current.diagnosis) target.diagnosis = sanitizeDischargeDiagnosis(current.diagnosis);
+      else if (current.diagnosisControl) {
+        // 第一個 ShowXml 視窗在 Edge 上偶爾會先完成空白文件，再延遲載入報告表格。
+        // 若第一次等待仍無結果，重新註冊 request 並再次觸發同一筆；舊 request 已斷線，
+        // 背景端不會把晚到的內容寫入下一筆。
+        for (let attemptIndex = 0; attemptIndex < 2 && !target.diagnosis; attemptIndex += 1) {
+          if (cancelled()) throw new Error('cancelled');
+          const liveTable = pickTableBy(DISCHARGE_HEADS);
+          const liveRow = liveTable && readDischargeRows(liveTable).find(row => row.key === target.key);
+          if (!liveRow) break;
+          if (liveRow.diagnosis) {
+            target.diagnosis = sanitizeDischargeDiagnosis(liveRow.diagnosis);
+            break;
+          }
+          if (!liveRow.diagnosisControl) break;
+          if (attemptIndex > 0) progress(index + 1, a.rows.length, target, 'retrying');
+          const before = reportSnapshot();
+          const relay = startDischargeDiagnosisRelay(target);
+          try {
+            if (relay) await relay.ready;
+            liveRow.diagnosisControl.click();
+            target.diagnosis = await waitForDischargeDiagnosis(target, before, cancelled, relay);
+          } finally {
+            if (relay) relay.close();
+          }
+          if (!target.diagnosis && attemptIndex === 0) {
+            await new Promise(resolve => setTimeout(resolve, 400));
+          }
+        }
         closeReportSurface();
       }
-      if (target.summary) captured += 1;
+      if (target.diagnosis) captured += 1;
       else missing += 1;
       a.captured = captured; a.missing = missing;
       progress(index + 1, a.rows.length, target, 'done');
@@ -1306,7 +1428,7 @@
   // ══════════════════════════════════════════════════════
   const AGGREGATE_LABELS = {
     med: '近三個月西醫用藥', lab: '近三個月檢驗與檢查', imaging: '近三個月影像及病理',
-    surgery: '手術紀錄', discharge: '出院病歷摘要', allergy: '過敏紀錄'
+    surgery: '手術紀錄', discharge: '出院診斷', allergy: '過敏紀錄'
   };
   const rocFmt = date => date
     ? `${date.getFullYear() - 1911}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
@@ -1353,10 +1475,10 @@
         : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
     }
     if (key === 'discharge') {
-      const headers = ['住院日期', '出院日期', '就醫科別', '主診斷', '出院病摘', '來源'];
+      const headers = ['住院日期', '出院日期', '就醫科別', '主診斷', '出院診斷', '來源'];
       const rows = result.discharge ? result.discharge.rows.map(row => [
         row.admissionRaw, row.dischargeRaw, row.dept, row.dx,
-        row.summary || '（無法讀取，請回原頁核對）', row.src
+        row.diagnosis || '（無法讀取，請回原頁核對）', row.src
       ]) : [];
       return rows.length ? { text: plainTable(headers, rows), html: richTable(headers, rows) }
         : { text: sectionFallback(result, key), html: `<p>${esc(sectionFallback(result, key))}</p>` };
@@ -1461,13 +1583,41 @@
       <div class="nh-head">
         <b>${esc(title)}</b>
         <span class="nh-sub">純本機處理・未上傳任何資料</span>
+        <button class="nh-collapse" title="收合面板" aria-label="收合面板" aria-expanded="true"></button>
         <button class="nh-x" title="關閉">×</button>
       </div>
       <div class="nh-body"></div>
       <div class="nh-foot">${footBtns}<span class="nh-msg"></span>
         <span class="nh-clipwarn">含醫療資料；貼完請清除剪貼簿</span>
       </div>`;
+    const collapse = wrap.querySelector('.nh-collapse');
+    collapse.onclick = () => {
+      const collapsed = wrap.classList.toggle('nh-collapsed');
+      wrap.querySelector('.nh-body').style.display = collapsed ? 'none' : '';
+      wrap.querySelector('.nh-foot').style.display = collapsed ? 'none' : '';
+      collapse.title = collapsed ? '展開面板' : '收合面板';
+      collapse.setAttribute('aria-label', collapsed ? '展開面板' : '收合面板');
+      collapse.setAttribute('aria-expanded', String(!collapsed));
+    };
     return wrap;
+  }
+
+  function positionAggregatePanel(wrap) {
+    const update = () => {
+      if (!document.body.contains(wrap)) return;
+      const summaryTab = topTab('摘要');
+      const tabBottom = summaryTab ? summaryTab.getBoundingClientRect().bottom : 124;
+      const maximumTop = Math.max(96, window.innerHeight - 260);
+      const top = Math.min(maximumTop, Math.max(96, Math.ceil(tabBottom + 8)));
+      wrap.style.top = `${top}px`;
+    };
+    const previousCleanup = wrap._nhCleanup;
+    wrap._nhCleanup = () => {
+      window.removeEventListener('resize', update);
+      if (typeof previousCleanup === 'function') previousCleanup();
+    };
+    window.addEventListener('resize', update);
+    update();
   }
 
   function wireCopy(wrap, a, map) {
@@ -1901,7 +2051,7 @@
     }
     aggregateRunning = true; btn.disabled = true;
     const wrap = shell('整合病歷摘要', '<button class="nh-btn nh-copy-all" disabled>正在彙整…</button>');
-    wrap.classList.add('nh-wide');
+    wrap.classList.add('nh-wide', 'nh-sidepanel');
     let cancelled = false;
     wrap._nhCleanup = () => { cancelled = true; };
     wrap.querySelector('.nh-x').onclick = () => disposePanel(wrap);
@@ -1909,6 +2059,7 @@
       <div class="nh-ag-progress">${Object.entries(AGGREGATE_LABELS).map(([key, label]) =>
         `<div class="nh-ag-row" data-key="${key}"><b>${esc(label)}</b><span>等待中</span></div>`).join('')}</div>`;
     document.body.appendChild(wrap);
+    positionAggregatePanel(wrap);
     const isCancelled = () => cancelled || !document.body.contains(wrap);
     const captureCancelled = () => {
       if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');
@@ -1994,17 +2145,17 @@
       await collect('discharge', async () => {
         const table = await visitTable(['出院病摘'], () => pickTableBy(DISCHARGE_HEADS), isCancelled, patientHash);
         const rows = readDischargeRows(table);
-        const data = { rows, captured: rows.filter(row => row.summary).length, missing: 0 };
-        if (rows.length) await captureDischargeSummaries(data, (current, total) => {
-          setProgress('discharge', `正在讀取病摘 ${current}/${total}…`);
+        const data = { rows, captured: rows.filter(row => row.diagnosis).length, missing: 0 };
+        if (rows.length) await captureDischargeDiagnoses(data, (current, total) => {
+          setProgress('discharge', `正在讀取出院診斷 ${current}/${total}…`);
         }, captureCancelled);
         result.discharge = {
           captured: data.captured, missing: data.missing,
-          rows: data.rows.map(({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, summary }) =>
-            ({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, summary }))
+          rows: data.rows.map(({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, diagnosis }) =>
+            ({ sourceIndex, key, admissionRaw, dischargeRaw, date, dept, dx, src, diagnosis }))
         };
         if (data.missing) result.states.discharge = {
-          status: 'partial', message: `${data.captured}/${rows.length} 筆病摘成功，${data.missing} 筆需核對`
+          status: 'partial', message: `${data.captured}/${rows.length} 筆出院診斷成功，${data.missing} 筆需核對`
         };
       });
       await collect('allergy', async () => {

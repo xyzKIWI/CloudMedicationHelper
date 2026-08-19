@@ -22,8 +22,16 @@
 #nhi-helper-root .nh-head b{ font-size:16px; color:#0f6e64; }
 #nhi-helper-root .nh-sub{ font-size:12px; color:#0a7d43; background:#eafaf0;
   border:1px solid #b5e3c8; border-radius:20px; padding:1px 9px; }
-#nhi-helper-root .nh-x{ margin-left:auto; border:0; background:transparent; font-size:22px;
+#nhi-helper-root .nh-collapse{ margin-left:auto; border:0; background:transparent; font-size:20px;
+  line-height:1; cursor:pointer; color:#5f7070; padding:0 5px; }
+#nhi-helper-root .nh-collapse::before{ content:'—'; }
+#nhi-helper-root.nh-collapsed .nh-collapse::before{ content:'□'; }
+#nhi-helper-root .nh-x{ margin-left:0; border:0; background:transparent; font-size:22px;
   line-height:1; cursor:pointer; color:#5f7070; padding:0 4px; }
+#nhi-helper-root.nh-collapsed{ bottom:auto; width:min(420px,calc(100vw - 36px)); resize:none; }
+#nhi-helper-root.nh-collapsed .nh-head{ border-bottom:0; border-radius:12px; }
+#nhi-helper-root.nh-collapsed .nh-body,
+#nhi-helper-root.nh-collapsed .nh-foot{ display:none; }
 #nhi-helper-root .nh-body{ overflow:auto; padding:12px 14px; flex:1; }
 #nhi-helper-root .nh-foot{ padding:10px 14px; border-top:1px solid #e2edec; display:flex;
   align-items:center; gap:8px; flex-wrap:wrap; background:#f9fcfc; border-radius:0 0 12px 12px; }
@@ -146,6 +154,8 @@
 
 /* ── 檢驗大表格 ─────────────────────────────── */
 #nhi-helper-root.nh-wide{ width:min(1060px,96vw); }
+#nhi-helper-root.nh-sidepanel{ top:132px; width:min(760px,55vw); min-width:min(440px,calc(100vw - 36px));
+  resize:horizontal; overflow:hidden; }
 #nhi-helper-root .nh-tblwrap{ overflow:auto; max-height:56vh; border:1px solid #e2edec;
   border-radius:8px; }
 #nhi-helper-root .nh-tbl{ border-collapse:separate; border-spacing:0; font-size:12.5px;
@@ -204,4 +214,7 @@
 #nhi-helper-root .nh-ag-preview th, #nhi-helper-root .nh-ag-preview td{
   border:1px solid #d6e2e1; padding:4px 7px; text-align:left; vertical-align:top; }
 #nhi-helper-root .nh-ag-preview th{ background:#f4f9f9; color:#0f6e64; }
-@media (max-width:760px){ #nhi-helper-root .nh-ag-grid{ grid-template-columns:1fr; } }
+@media (max-width:900px){
+  #nhi-helper-root.nh-sidepanel{ width:calc(100vw - 36px); min-width:0; resize:none; }
+  #nhi-helper-root .nh-ag-grid{ grid-template-columns:1fr; }
+}

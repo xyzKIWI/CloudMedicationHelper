@@ -7,6 +7,7 @@
 ## 目錄
 
 - `extension/manifest.json`：擴充功能清單與版本。
+- `extension/background.js`：只在記憶體中逐筆配對摘要頁與另開的 ShowXml 頁。
 - `extension/content.js`：頁面偵測、資料解析、報告讀取、整理與複製。
 - `extension/panel.css`：整理面板樣式。
 - `test-fixtures/`：不含真實病人資料的合成測試頁。
@@ -19,9 +20,9 @@
 2. 單頁整理在 SPA 表格指紋變更時關閉；整合流程另以記憶體內病人指紋及查詢／登出事件防止跨個案混合。
 3. 西醫用藥、檢驗與影像病理採共用的三個曆月篩選；影像先篩日期與報告列，再觸發報告按鈕。
 4. 影像病理以原頁「報告」控件逐筆觸發，偵測健保頁重複使用的報告 DOM。
-5. 出院病摘以獨立讀取流程觸發「開啟此筆病摘」，不共用影像列配對邏輯。
+5. 出院病摘以獨立讀取流程觸發「開啟此筆病摘」；若另開 ShowXml 頁，只擷取「出院診斷」，並以出院日期及院所代碼逐筆配對。ShowXml 建立記憶體控制 port，既有具名 popup 即使只被聚焦、沒有重新導頁，也能應要求重新送出目前欄位；視窗保留至使用者關閉，供後續列重用。
 6. 過敏優先依藥品代碼去重，沒有代碼時才以 NFKC 正規化藥名；不做模糊比對。
-7. 單筆報告或病摘最多等待 12 秒，失敗後繼續下一筆並保留核對警示。
+7. 影像報告單筆最多等待 12 秒；出院診斷因首次建立 Edge popup 可能先出現空白文件，單次最多等待 35 秒，未取得時會重新註冊並再試一次。失敗後繼續下一筆並保留核對警示。
 
 ## 隱私不變條件
 
@@ -32,7 +33,7 @@
 - 不將病人資料寫入 `localStorage`、`sessionStorage`、`chrome.storage`、IndexedDB 或檔案。
 - 合成 fixture、測試輸出、截圖與文件不可含真實姓名、身分證、病歷號、院所、日期或報告內文。
 - 影像病理匯出僅限五欄：檢驗日期、醫令名稱、報告結果、檢驗類別、來源。
-- 整合流程只在 content script closure 內保留資料；提交結果前再次核對病人指紋，且不保留 DOM 節點。
+- 整合結果只在 content script closure 內保留；跨分頁 request 只在 service worker 記憶體中短暫存在，逾時即刪除，不保留 DOM 節點。
 - 複製結果可含醫療資料，UI 必須保留剪貼簿警示。
 
 ## 測試
@@ -41,7 +42,9 @@
 
 ```powershell
 node --check .\extension\content.js
+node --check .\extension\background.js
 node .\test-fixtures\formatters-smoke.mjs
+node .\test-fixtures\discharge-diagnosis-smoke.mjs
 
 Set-Location C:\Users\User\Projects\web-reader
 node .\src\medcloud-extension-smoke.js
@@ -49,7 +52,7 @@ node .\src\medcloud-timeout-smoke.js
 node .\src\medcloud-integrated-smoke.js
 ```
 
-`medcloud-extension-smoke.js` 覆蓋隱藏 DOM、短報告、連續重複報告、五欄匯出與敏感欄位排除。`medcloud-timeout-smoke.js` 確認首筆無回應約 12 秒後會繼續。`medcloud-integrated-smoke.js` 覆蓋六頁籤切換、三個曆月、純報告列、出院病摘、過敏去重與整合剪貼簿。
+`discharge-diagnosis-smoke.mjs` 覆蓋 ShowXml 欄位隔離與跨分頁安全配對。`medcloud-extension-smoke.js` 覆蓋隱藏 DOM、短報告、連續重複報告、五欄匯出與敏感欄位排除。`medcloud-timeout-smoke.js` 確認首筆無回應約 12 秒後會繼續。`medcloud-integrated-smoke.js` 覆蓋六頁籤切換、三個曆月、純報告列、出院診斷、過敏去重與整合剪貼簿。
 
 實機測試只可輸出筆數、進度與技術錯誤，不得儲存個案識別資料、日期、院所、醫令名稱、截圖或報告內文。
 
