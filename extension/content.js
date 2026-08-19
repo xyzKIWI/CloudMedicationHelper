@@ -1499,7 +1499,6 @@
       const suffix = ['med', 'lab', 'imaging'].includes(key) ? `（${period}）` : '（依原頁查詢範圍）';
       parts.push(`【${AGGREGATE_LABELS[key]}${suffix}】\n${aggregateSectionData(result, key).text}`);
     }
-    parts.push('※ 健保雲端當前可見資料自動彙整；請核對原頁後再存入病歷。');
     return parts.join('\n\n');
   }
 
@@ -1511,7 +1510,6 @@
       const suffix = ['med', 'lab', 'imaging'].includes(key) ? `（${period}）` : '（依原頁查詢範圍）';
       parts.push(`<h3>${esc(AGGREGATE_LABELS[key] + suffix)}</h3>${aggregateSectionData(result, key).html}`);
     }
-    parts.push('<p><small>※ 健保雲端當前可見資料自動彙整；請核對原頁後再存入病歷。</small></p>');
     return `<div>${parts.join('')}</div>`;
   }
 
@@ -1579,6 +1577,7 @@
   function shell(title, footBtns) {
     const wrap = document.createElement('div');
     wrap.id = ID;
+    wrap.classList.add('nh-sidepanel');
     wrap.innerHTML = `
       <div class="nh-head">
         <b>${esc(title)}</b>
@@ -1602,11 +1601,17 @@
     return wrap;
   }
 
-  function positionAggregatePanel(wrap) {
+  function positionPanel(wrap) {
     const update = () => {
       if (!document.body.contains(wrap)) return;
       const summaryTab = topTab('摘要');
-      const tabBottom = summaryTab ? summaryTab.getBoundingClientRect().bottom : 124;
+      const summaryRect = summaryTab && summaryTab.getBoundingClientRect();
+      const nearbyTabBottoms = summaryRect ? [...document.querySelectorAll('a, [role="tab"]')]
+        .filter(element => !element.closest(`#${ID}`) && isVisible(element))
+        .map(element => element.getBoundingClientRect())
+        .filter(rect => rect.top >= summaryRect.top - 2 && rect.top <= summaryRect.bottom + 90)
+        .map(rect => rect.bottom) : [];
+      const tabBottom = Math.max(summaryRect ? summaryRect.bottom : 124, ...nearbyTabBottoms);
       const maximumTop = Math.max(96, window.innerHeight - 260);
       const top = Math.min(maximumTop, Math.max(96, Math.ceil(tabBottom + 8)));
       wrap.style.top = `${top}px`;
@@ -1618,6 +1623,11 @@
     };
     window.addEventListener('resize', update);
     update();
+  }
+
+  function mountPanel(wrap) {
+    document.body.appendChild(wrap);
+    positionPanel(wrap);
   }
 
   function wireCopy(wrap, a, map) {
@@ -1826,7 +1836,7 @@
     H.push(`<div class="nh-pane" data-p="time" hidden>${P3.join('')}</div>`);
 
     wrap.querySelector('.nh-body').innerHTML = H.join('');
-    document.body.appendChild(wrap);
+    mountPanel(wrap);
     wireViews(wrap);
     wireCopy(wrap, a, {
       '.nh-c1': [medToPasteFormat, '（精簡藥歷）'],
@@ -1902,7 +1912,7 @@
       a.clinics.map(([n, c]) => `<span>${esc(n)} <b>${c}</b></span>`).join('') + '</div>');
 
     wrap.querySelector('.nh-body').innerHTML = H.join('');
-    document.body.appendChild(wrap);
+    mountPanel(wrap);
     wireCopy(wrap, a, {
       '.nh-c1': [labToTable, '（大表格，可直接貼 Excel）'],
       '.nh-c2': [labToSimpleList, '（簡易條列）'],
@@ -1990,7 +2000,7 @@
       else await runCapture(true);
     };
     wrap.querySelector('.nh-x').onclick = () => disposePanel(wrap);
-    document.body.appendChild(wrap);
+    mountPanel(wrap);
     // 報告本文不在初始表格 DOM，必須觸發原頁「報告」才會載入。
     // 使用者按下「整理影像／病理」即視為開始整理：面板開啟後自動逐筆讀取，
     // 完成時只呈現「複製整理表格」，避免還要再找一次啟動按鈕。
@@ -2051,15 +2061,14 @@
     }
     aggregateRunning = true; btn.disabled = true;
     const wrap = shell('整合病歷摘要', '<button class="nh-btn nh-copy-all" disabled>正在彙整…</button>');
-    wrap.classList.add('nh-wide', 'nh-sidepanel');
+    wrap.classList.add('nh-wide');
     let cancelled = false;
     wrap._nhCleanup = () => { cancelled = true; };
     wrap.querySelector('.nh-x').onclick = () => disposePanel(wrap);
     wrap.querySelector('.nh-body').innerHTML = `<div class="nh-note">將依序切換健保雲端頁籤，資料僅保留於本分頁記憶體。</div>
       <div class="nh-ag-progress">${Object.entries(AGGREGATE_LABELS).map(([key, label]) =>
         `<div class="nh-ag-row" data-key="${key}"><b>${esc(label)}</b><span>等待中</span></div>`).join('')}</div>`;
-    document.body.appendChild(wrap);
-    positionAggregatePanel(wrap);
+    mountPanel(wrap);
     const isCancelled = () => cancelled || !document.body.contains(wrap);
     const captureCancelled = () => {
       if (patientContextFingerprint() !== patientHash) throw new Error('patient-changed');

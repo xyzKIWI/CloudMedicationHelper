@@ -28,8 +28,11 @@
 #nhi-helper-root.nh-collapsed .nh-collapse::before{ content:'□'; }
 #nhi-helper-root .nh-x{ margin-left:0; border:0; background:transparent; font-size:22px;
   line-height:1; cursor:pointer; color:#5f7070; padding:0 4px; }
-#nhi-helper-root.nh-collapsed{ bottom:auto; width:min(420px,calc(100vw - 36px)); resize:none; }
+#nhi-helper-root.nh-collapsed{ top:auto !important; bottom:18px; width:min(420px,calc(100vw - 36px)) !important;
+  min-width:0 !important; resize:none !important; overflow:hidden; }
 #nhi-helper-root.nh-collapsed .nh-head{ border-bottom:0; border-radius:12px; }
+#nhi-helper-root.nh-collapsed .nh-head b{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#nhi-helper-root.nh-collapsed .nh-sub{ display:none; }
 #nhi-helper-root.nh-collapsed .nh-body,
 #nhi-helper-root.nh-collapsed .nh-foot{ display:none; }
 #nhi-helper-root .nh-body{ overflow:auto; padding:12px 14px; flex:1; }
